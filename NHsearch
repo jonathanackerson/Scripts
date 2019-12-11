@@ -1,0 +1,620 @@
+#!/bin/bash
+
+#Gobal variables are defined here
+declare -a slots=()
+declare -a bladips=()
+declare -a shelips=()
+declare -a shmatrix=()
+declare -a passes=()
+slot=""
+defaultp=opticall
+pass=""
+prompt="(%|#|\\$) $"
+cliip=197\.1\.1\.
+sheip=192\.168\.0\.
+exv1=" timeout {\n
+		exit 1\n
+	} eof {\n
+		exit 1\n
+	}"
+exv=`echo -e ${exv1}`
+
+#Print Dots while doing stuff
+PrintDots() { #Takes message as only parameter
+	printf "$1"
+	while [ 1 -eq 1 ];do
+		printf .
+		sleep 1
+	done
+}
+
+#Kills PrintDots job
+#Expects PrintDots to be Running
+KillIt() { #Takes job id as only parameter
+	kill -STOP ${1} > /dev/null 2>&1
+	pkill -9 PrintDots > /dev/null 2>&1
+	kill ${1} > /dev/null 2>&1
+}
+
+#Gets Shelf Manager IP's and sets shelips()
+#NEEDS - global array shelips() to store all shelfs found
+#NEEDS - global var sheip to define shelf manager subnet
+SetShms() { #Takes NO Parameters
+	shelips=()
+	shelips=(`ping -I eth1 -b -c 2 -n ${sheip}255 2>&1 | \
+		grep -o "${sheip}[0-9]*" | \
+		grep -v "${sheip}1\|${sheip}255" | \
+		sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n`)
+}
+
+#Gets number of slots from shelf and sets slots()
+#NEEDS - ShmCon function to log into shelf
+#NEEDS - global array slots() to store slots found
+SetSlots() { #Takes shelf manager IP and password as parameters
+	slots=()
+	slots=(`ShmCon $1 "clia shelf at" "${2}" | \
+		grep "AdvancedTCA Board" | \
+		sed -e s/".*# "// -e s/",.*"// | \
+		sort -n`)
+}
+
+#Gets Blade IP's and sets bladips()
+#NEEDS - global array bladips() to store all blades found
+#NEEDS - global var cliip to define client subnet
+SetBlades() { #Takes NO Parameters
+	bladips=()
+	bladips=(`ping -I eth1 -b -c 2 -n ${cliip}255 2>&1 | \
+		grep -o "${cliip}[0-9]*" | \
+		grep -v "${cliip}254\|${cliip}255" | \
+		sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n`)
+}
+
+#Sets default expect log in string
+#Returns configured expect login string
+#NEEDS - global var exv1 to set expect
+CreateExLogin() { #Takes Parameters Username, Machine, Password, and optional argument to execute
+	USERNAME=${1}
+	MACHINE=${2}
+	PASSWORD=${3}
+	ARG=" ${4}"
+	lgin="spawn ssh ${USERNAME}@${MACHINE}${ARG}\n
+expect {\n
+	\"Host key verification failed.\" {\n
+		send \"Removing line from known_hosts\n\"\n
+		exec sed -i -e \"/${MACHINE}/d\" /root/.ssh/known_hosts\n
+		spawn ssh ${USERNAME}@${MACHINE}${ARG}\n
+		expect \"yes/no)?\"\n
+		send \"yes\r\"\n
+		expect \"${USERNAME}@${MACHINE}'s password:\"\n
+		send \"${PASSWORD}\r\"\n
+	} \"yes/no)?\" {\n
+		send \"yes\r\"\n
+		expect \"${USERNAME}@${MACHINE}'s password:\"\n
+		send \"${PASSWORD}\r\"\n
+	} \"${USERNAME}@${MACHINE}'s password:\" {\n
+		send \"${PASSWORD}\r\"\n
+	} \"assword:\" {\n
+		send \"${PASSWORD}\r\"\n
+	} ${exv1} }"
+	echo ${lgin}
+}
+
+#Runs given command on remote system using parameters given
+#Prints out all data retrieved
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+ShmCon() { #Takes Shelf Manager IP, command, and password if required
+	[ -n "$3" ] && Password="${3}" || Password=${pass}
+	lgin=`CreateExLogin root $1 "$Password" "$2"`
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect  - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		exit 0
+	} ${exv}
+}
+ENDEXP
+}
+
+#Return exit status and prints out all data, exit status is used to verify pword
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+CheckPass() { #Takes IP and password as paramaters
+	[ -n "$2" ] && Password=$2 || Password=${pass}
+	lgin=`CreateExLogin root $1 "$Password"`
+	lgin=`echo ${lgin} | sed -e s/"}$"/" -re \"$prompt\" {\n exit 3\n } }"/`	
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		exit 0
+	}
+	"denied," {
+		exit 2
+	} ${exv}
+}
+ENDEXP
+	ret=$?
+	return ${ret}
+}
+
+#Logs into blade and retrievs blade data
+#Return exit status and prints out all blade data
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+GetSerial() { #Takes 1 or 2 parameters: IP and password optional
+	[ -n "$2" ] && Password=$2 || Password=${pass}
+	MACHINE=$1
+	lgin=`CreateExLogin root $MACHINE "$Password"`
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		send "ifconfig | grep -i -B 1 \"$MACHINE\" | \\
+			grep -o \"HWaddr.*\\\|eth\[0-9\].\"\r"
+		expect {
+			-ex "HWaddr " {
+				expect -re "$prompt"
+				send "hostname | sed -e s/.*/\"HN\\\AME &\"/\r"
+				expect "HNAME" 
+				expect -re "$prompt"
+				send "mount | grep -o -m 1 \"\[0-9\]:.*\/root\" | \\
+					sed -e s/'\\\/root'// | \\
+					grep -o \".*/\" | \\
+					sed -e s/'\\\/$'// -e s/'.*\\\/'// | \\
+					sed -e s/.*/\"NH\\\OS &\"/\r"
+				expect "NHOS" 
+				expect -re "$prompt"
+				send "ipmitool fru | grep \"Board Ser.*:\\\|Board Prod.*:\"\r"
+				expect {
+					-ex "Board Serial" {
+						expect -re "$prompt"
+						send "exit\r"
+						expect eof {
+							spawn /bin/bash
+							expect -re "$prompt"
+							exit 0
+						}
+					}
+					-ex "Unknown FRU header version" {
+						expect -re "$prompt"
+						send "exit\r"
+						expect eof {
+							spawn /bin/bash
+							expect -re "$prompt"
+							exit 0
+						}
+					}
+					eof {
+						spawn /bin/bash
+						expect -re "$prompt"
+						exit 0
+					}
+				}
+			} 
+			-re "$prompt" {
+				send "exit\r"
+				expect "closed"
+				expect eof {
+					spawn /bin/bash
+					expect -re "$prompt"
+					send "echo \"Wrong machine\"\r"
+					expect -re "$prompt"
+					exit 1
+				}
+			}
+		}
+	} ${exv}
+}
+ENDEXP
+	ret=$?
+	return ${ret}
+}
+
+#Used to Set the login password "pass" on remote systems.
+#Will prompt for password if the correct password isnt supplied
+#NEEDS - CheckPass function to check the password
+#NEEDS - global array passes() for holding known passwords
+#NEEDS - global variable pass for holding configured password
+SetPass() { #Takes IP and password as parameters
+	[ -n "$2" ] && pass=$2 || pass=""
+	printf "\nVerifying $1 password..."
+	#echo -e "\nVerifying $1 password..."
+	bla=`CheckPass $1 "${pass}"`
+	chk=$? && [ ${chk} -eq 0 ] && printf "DONE\n"
+	while [ "${chk}" != "0" ];do
+		if [ "${chk}" == "2" ];then
+			echo -e "\nIncorrect password \"${pass}\""
+			echo "What is the password for ${1}?"
+			echo -e "\tType the password or exit to quit"
+			read pass
+			if [ "${pass}" != "exit" ];then
+				bla=`CheckPass $1 "${pass}"`
+				chk=$?
+			else
+				echo "Unable to log into ${1}?"
+				#exit 0
+				chk=0
+			fi
+		elif [ "${chk}" == "1" ];then
+			echo "Unable to log into ${1}"
+			#exit 0
+			chk=0
+		elif [ "${chk}" == "3" ];then
+			echo -e "No Password configured for ${1}\n"
+			pass="Not Configured" 
+			chk=0
+		fi
+	done
+	declare -i sz=${#passes[@]}
+	passes[${sz}]="IP=${1} PASSWORD=${pass}"
+}
+
+#Sets pass to password of the IP given
+#NEEDS - SetPass function to set the password
+#NEEDS - global array passes() to store passwords
+GetPass() { #Takes IP, and password as optional parameter
+	ind=""
+	declare -i x=0
+	declare -i sz=${#passes[@]}
+	while [ ${x} -lt ${sz} ];do
+		declare -i tst=`echo ${passes[${x}]} | grep -c "IP=${1}"`
+		if [ ${tst} -gt 0 ];then
+			ind=${x}
+			break
+		fi
+		x=$x+1
+	done
+	if [ -n "${ind}" ];then
+		pass=`echo ${passes[${ind}]} | \
+			grep -o "PASSWORD=.*" | sed -e s/"PASSWORD="//`
+	else
+		SetPass ${1} "${2}"
+	fi
+}
+
+#Searches Shelf slot by slot for blade with given serial number
+#Sets slot variable so that data can be retrieved
+#Should set pass before running
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - global array slots to know what slots to search
+#NEEDS - global variable slot to set
+#NEEDS - global variable pass for holding configured password
+GetSlot() { #Takes serial Number and shelf manager IP as parameters
+	slot=""
+	for slt in "${slots[@]}";do
+		sleep 1
+		printf ${slt}
+		fru=`ShmCon $2 "clia fruinfo board ${slt}" "${pass}"`
+		declare -i tmp=`echo "${fru}" | grep -c "${1}"`
+		if [ ${tmp} -gt 0 ];then
+			slot=${slt}
+			break
+		fi
+	done
+}
+
+#Create Matrix of shelfs, slots, and serial numbers to quicken searches
+#Sets shmatrix with list of shelfs, slots and serial numbers
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - global array shelips() to use all shelfs found
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global array slots to know what slots to search
+#NEEDS - global array shmatrix() to store the matrix
+SetShelfMatrix() { #Sets Matrix of Chassis and Blade Serial Numbers
+	declare -i x=0
+	echo "Setting Shelf Matrices"
+	for shm in "${shelips[@]}";do
+		GetPass ${shm}
+		SetSlots ${shm} "${pass}"
+		PrintDots "Creating Shelf Matrix for ${shm} at Slot " &
+		jb=$!
+		for slt in "${slots[@]}";do
+			sleep 1
+			printf ${slt}
+			txt=`ShmCon ${shm} "clia fruinfo board ${slt}" "${pass}"`
+			sn=`echo -e "${txt}" | grep -m 1 "Board Serial" | \
+				sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+			if [ -n "${sn}" ];then
+				shmatrix[${x}]="SN=${sn} SHELF=${shm} SLOT=${slt}"
+				x=$x+1
+			fi
+		done
+		KillIt ${jb}
+		printf "DONE\n"
+	done
+}
+
+#Searches shmatrix for serial number provided
+#Returns index of shmatrix that contains the given serial number
+#NEEDS - SetShelfMatrix function to set shmatrix
+#NEEDS - global array shmatrix() to store the matrix
+SearchMatrix() { #Takes SN to search for as only parameter
+	declare -i x=0
+	declare -i sz=${#shmatrix[@]}
+	while [ ${x} -lt ${sz} ];do
+		declare -i tst=`echo ${shmatrix[${x}]} | grep -c "${1}"`
+		if [ ${tst} -gt 0 ];then
+			echo "${x}"
+			break
+		fi
+		x=$x+1
+	done
+}
+
+#Retrieves fru info and slot data for given slot from shelf manager
+#Returns formatted slot info
+#Providing full as 3rd paramater causes more data to be displayed
+#Should set pass before running
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - global variable pass for holding configured password
+GetSlotInfo() { #Takes shelf manager IP, shelf slot, and optional full as parameters
+	[ "$3" == "full" ] && full="true" || full="false"
+	printf "\nShelf ${shm} - Slot $2 "
+	declare -a frus=(`ShmCon $1 "clia board $2" "${pass}" | \
+		grep "FRU #" | \
+		sed -e s/": FRU #"// -e s/" (.*"// | \
+		grep -o ".*[0-9]" | \
+		xargs -i echo -e '"{}"'`)
+	echo -e "`echo ${frus[0]} | \
+		egrep -o -i \"^[a-z0-9]+\" | 
+		sed -e s/\".*\"/\"- FRU &\"/`"
+	for vfru in "${frus[@]}";do
+		if [ "${full}" == "true" ];then
+			txti=`ShmCon $1 "clia fruinfo ${vfru}" "${pass}" | \
+				grep "Board Product Name\|Board Serial\|Board Manufacturer\|Board Part"`
+		fi
+		txtf=`ShmCon $1 "clia fru ${vfru}" "${pass}" | \
+			grep "Hot Swap State\|Device ID String"`
+		sn=`echo -e "$txti" | grep -m 1 "Board Serial" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		prod=`echo -e "$txti" | grep -m 1 "Board Product" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		man=`echo -e "$txti" | grep -m 1 "Board Manufacturer" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		prt=`echo -e "$txti" | grep -m 1 "Board Part" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		ste=`echo -e "$txtf" | grep -m 1 "Hot Swap State" | 
+			sed -e s/").*"// -e s/".*("//`
+		dev=`echo -e "$txtf" | grep -m 1 "Device ID String" | \
+			sed -e s/".*: \""// | egrep -o -i ".*[a-z0-9]"`
+		
+		echo -e "\tSlot $2 - FRU ${vfru}"
+		[ -n "$man" ] && echo -e "\t Manufacturer\t\t= ${man}"
+		[ -n "$prod" ] && echo -e "\t Product\t\t= ${prod}"
+		[ -n "$sn" ] && echo -e "\t Serial Number\t\t= ${sn}"
+		[ -n "$prt" ] && echo -e "\t Part Number\t\t= ${prt}"
+		[ -n "$dev" ] && echo -e "\t Device ID\t\t= ${dev}"
+		[ -n "$ste" ] && echo -e "\t Current State\t\t= ${ste}"
+	done
+	if [ ${#frus[0]} -eq 0 ];then
+		txta=`ShmCon $1 "clia board $2" "${pass}" | grep "absent"`
+		abs=`echo -e "$txta" | grep -m 1 "absent" | \
+			egrep -o -i "[a-z0-9].*[a-z0-9]"`
+		[ -n "$abs" ] && echo -e "\t${abs}"
+	fi
+}
+
+#Gets all slot info for provided shlelf IP using GetSlotInfo
+#Providing full as 2nd paramater causes more data to be displayed
+#NEEDS - SetSlots function to get number of slots in chassis
+#NEEDS - GetSlotInfo function to get specific data on slots
+#NEEDS - global array slots to know what slots to search
+GetShelfInfo() { #Takes shelf manager IP as parameter and full as optional parameter
+	GetPass ${1}
+	echo -e "\nShelf $1 Slot Info"
+	SetSlots ${1} "${pass}"
+	for slt in "${slots[@]}";do
+		GetSlotInfo $1 $slt $2
+	done
+}
+
+#Gets shelf info for provided shlelf IP
+#Returns formatted shelf info
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global array slots to know what slots to search
+GetShmData() { #Takes shelf manager IP as only parameter
+	GetPass $1
+	pas=${pass}
+	PrintDots "\nRetrieving Shelf info from $1 " &
+	jb=$!
+	SetSlots $1 "${pas}"
+	slt=${#slots[@]}
+	gmac=`ShmCon $1 "ifconfig" "${pas}" | \
+		grep -i -B 1 "$1"`
+	txt=`ShmCon $1 "version" "${pas}" | \
+		grep "Firmware Image\|Image Name\|Manager ver."`
+	mac=`echo "$gmac" | grep -m 1 "HWaddr .*" | \
+		sed -e s/".*HWaddr "//g | egrep -i -o ".*[a-z0-9]"`
+	fiv=`echo -e "$txt" | \
+		grep "Firmware Image" | \
+		sed -e s/".*sion "// | \
+		egrep -i -o ".*[a-z0-9]"`
+	if [ ! -n "${fiv}" ];then
+		fiv=`echo -e "$txt" | \
+			grep -m 1 "Image Name" | \
+			sed -e s/".*:"// | \
+			egrep -i -o "[a-z0-9].*[a-z0-9]"`
+	fi
+	sfw=`echo -e "$txt" | \
+		grep "Manager ver." | \
+		sed -e s/".*ver\. "// | \
+		egrep -i -o ".*[a-z0-9]"`
+	KillIt $jb
+	printf "DONE\n"
+	[ -n "$1" ] && echo -e "\tShelf IP\t\t= $1"
+	[ -n "$mac" ] && echo -e "\tShelf MAC\t\t= $mac"
+	[ -n "$1" ] && echo -e "\tShelf Password\t\t= \"$pas\""
+	[ -n "$slt" ] && echo -e "\tShelf Slots\t\t= $slt"
+	[ -n "$fiv" ] && echo -e "\tShelf Image Version\t= $fiv"
+	[ -n "$sfw" ] && echo -e "\tShelf Manager Version\t= $sfw"
+}
+
+#Gets blade info for provided IP
+#Returns formatted blade info
+#NEEDS - GetSerial function to get serial number for blade
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - SearchMatrix function to search shmatrix for SN if set
+#NEEDS - GetSlot function to search shelfs for slot info
+#NEEDS - GetSlotinso function to get detailed info for slot
+#NEEDS - global array shmatrix()
+#NEEDS - global arral shelips() for shelf managers found
+#NEEDS - global array slots() to know what slots to search
+#NEEDS - global variable slot to store slot found
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global variable defaultp for default configured password
+GetBladeData() { #Takes Blade IP as only parameter
+	GetPass ${1} "${defaultp}"
+	pss=${pass}
+	PrintDots "\nRetrieving GPU info from ${1} " &
+	jb=$!
+	binfo=""
+	nodat=""
+	txt=`GetSerial ${1} "${pss}" | grep "Serial\|Product\|Unknown\|HWaddr\|eth\|NHOS\|HNAME"`
+	declare -i unk=`echo "${txt}" | grep -c "Unknown"`
+	sn=`echo -e "${txt}" | grep -m 1 "Board Serial" | egrep -o "[0-9]+"`
+	prod=`echo -e "${txt}" | grep -m 1 "Board Product" | \
+		sed -e s/".*: "// -e s/" .*"// | egrep -i -o ".*[a-z0-9]"`
+	eth=`echo "${txt}" | grep -m 1 "eth[0-9]" | egrep -o "[0-9]+"`
+	mac=`echo "${txt}" | grep -m 1 "HWaddr .*" | \
+		sed -e s/"HWaddr "//g | egrep -i -o ".*[a-z0-9]"`
+	img=`echo "${txt}" | grep -m 1 "NHOS" | \
+		sed -e s/"NHOS "//g | egrep -i -o ".*[a-z0-9]"`
+	hnm=`echo "${txt}" | grep -m 1 "HNAME" | \
+		sed -e s/"HNAME "//g | egrep -i -o ".*[a-z0-9]"`
+	KillIt ${jb}
+	printf "DONE\n"
+	shelman=""
+	if [ -n "${sn}" ];then
+		if [ ${#shmatrix[@]} -gt 0 ];then
+			ind=`SearchMatrix ${sn}`
+			if [ -n "${ind}" ];then
+				shelman=`echo ${shmatrix[${ind}]} | \
+					grep -o "SHELF=.* " | sed -e s/"SHELF="// -e s/" "//`
+				slot=`echo ${shmatrix[${ind}]} | \
+					grep -o "SLOT=.*" | sed -e s/"SLOT="//`
+			fi
+		else
+			for shm in "${shelips[@]}";do
+				GetPass ${shm}
+				SetSlots ${shm} "${pass}"
+				PrintDots "Checking for GPU ${1} in shelf ${shm} at Slot " &
+				jb=$!
+				GetSlot ${sn} ${shm}
+				KillIt ${jb}
+				if [ -n "${slot}" ];then
+					printf "FOUND\n"
+					shelman=${shm}
+					break 1
+				fi
+				printf "NOT FOUND\n"
+			done
+		fi
+		if [ -n "${slot}" ];then
+			GetPass ${shelman}
+			PrintDots "Retrieving Fru info from shelf" &
+			jb=$!
+			binfo=`GetSlotInfo ${shelman} ${slot} full`
+			KillIt ${jb}
+			printf "DONE\n"
+		else
+			echo "Blade not found in shelf"
+		fi
+	elif [ "${eth}" == "0" ];then
+		[ ! -n "${prod}" ] && prod="CP6010"
+	else
+		echo "No GPU info retrieved for ${1}"
+		nodat=true
+	fi
+	[ ! -n "${nodat}" ] && echo -e "\n${1} Data"
+	[ -n "${hnm}" ] && echo -e "\tHostname\t= ${hnm}"
+	[ -n "${sn}" ] && echo -e "\tSerial\t\t= ${sn}"
+	[ -n "${prod}" ] && echo -e "\tGPU\t\t= ${prod}"
+	[ -n "${mac}" ] && echo -e "\tMac\t\t= ${mac}"
+	[ -n "${eth}" ] && echo -e "\tEth\t\t= ${eth}"
+	[ ! -n "${nodat}" ] && echo -e "\tPassword\t= \"${pss}\""
+	[ -n "${img}" ] && echo -e "\tImage\t\t= ${img}"
+	[ -n "${shelman}" ] && echo -e "\tShelfManager\t= ${shelman}"
+	[ -n "${slot}" ] && echo -e "\tSlot\t\t= ${slot}"
+	[ -n "${binfo}" ] && echo -e "${binfo}"
+}
+
+#When one parameter is provided
+#	The IP is searched for and the data for the shelf or blade is listed
+#When no parameter is provided, all blade and shelf data are listed
+if [ -n "$1" ];then
+	echo "Searching for ${1} Info"
+	SetShms
+	SetBlades
+	bla=`echo $1 | grep "${cliip}"`
+	she=`echo $1 | grep "${sheip}"`
+	[ -n "${bla}" ] && GetBladeData $1
+	[ -n "${she}" ] && GetShmData $1
+else
+	SetShms
+	SetBlades
+	SetShelfMatrix
+	for blade in "${bladips[@]}";do
+		slot=""
+		GetBladeData ${blade}		
+	done
+	for shm in "${shelips[@]}";do
+		GetShmData ${shm}
+		GetShelfInfo ${shm}
+	done
+fi
+
+#####Function For Shelf Manager to Reboot#####
+#NOT TESTED OR USED#
+CliReboot() {
+	if [ -n "${vars[8]}" ] && [ -n "${vars[9]}" ];then
+		echo "Rebooting through Shelf Manager"
+		SHM=${vars[8]}
+		BRD=${vars[9]}
+		declare -i rest=`ShmCon $SHM "clia boardreset $BRD" | \
+			grep -c "Board $BRD reset, status returned 0"`
+		if [ ${rest} -eq 1 ]; then
+			return 0
+		else
+			return 2
+		fi
+	else
+		echo "No Shelf Manager configured for this blade"
+		echo "Blade must be restarted manually"
+		return 2
+	fi
+}
+
+#NOT USED - supposed to retrieve images installed
+Get_Images() {
+	declare -a arr=(`cat exports | grep "/root" | grep -v "^#" | egrep -o ".*/root" | sed -e s/"\/root$"//`)
+	for ar in ${arr[@]};do
+		echo "path is $ar"
+		[ -d ${ar}/root ] && [ -d ${ar}/snapshot ] && \
+			echo "Good diskless directory" || \
+			echo "Bad Diskless directory"
+		img=`echo $ar | egrep -o ".*\/" | sed -e s/"\/$"// -e s/".*\/"//`
+		echo "Image $img"
+	done
+}

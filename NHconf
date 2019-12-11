@@ -1,0 +1,5255 @@
+#!/bin/bash
+
+#Global Vars
+#Configuration file
+fle=/usr/local/etc/NHconf.cfg
+#exports configuration file
+defex="/etc/exports"
+#dchpd configuration file
+dfle="/etc/dhcpd.conf"
+#dchpd comparison file
+cmpdfle="/tmp/.cmp.dhcpd.conf"
+#backup dhcpd.conf file
+bkdh="/etc/.bak.dhcpd.conf"
+#bad dhcpd.conf file
+bddh="/etc/.bad.dhcpd.conf"
+#iptables configuration file
+iptfle="/etc/sysconfig/iptables"
+#backup dhcpd.conf file
+bkipt="/etc/sysconfig/.bak.iptables"
+
+slot=""
+pass=""
+messge=""
+defaultp=opticall
+defaultu=root
+defaulteth=eth1
+defaultdisk=/local/home/diskless/
+defaulttftp=/local/home/tftp/
+cliip=197\.1\.1\.
+sheip=192\.168\.0\.
+deebug=off
+
+declare -a ndtry=()
+declare -a bdtry=()
+declare -a pxtry=()
+declare -i dtrysz=0
+
+#Global Arrays
+declare -a slots=()
+declare -a bladips=()
+declare -a shelips=()
+declare -a shmatrix=()
+declare -a passes=()
+declare -a searchar=()
+declare -a entrytypes=( SERVER IMAGE CLIENT NPU_IMAGE SHELF BLADE BLADE_CONF NPU NPU_CONF )
+
+#Server vars
+declare -a SERVERvars=( SID HNME TFTP NFSROOT ETH CLIP SHIP NOTE )
+declare -a SERVERdesc=()
+SERVERdesc=( "ID\t\t\t" "Hostname\t\t" "TFTP Directory\t\t" "Diskless Directory\t" "Client Eth\t\t" "Client IP\t\t" "Shelf IP\t\t" "Note\t\t\t" )
+declare -a SERVERs=()
+declare -a SERVER=()
+declare -i SERVERlim=6
+SERVERnme="Server"
+SERVERlbl=SERVER
+
+#NHOS Image vars
+declare -a IMAGEvars=( OSI TFTP NFSROOT OPTS RDSIZE NOTE )
+declare -a IMAGEdesc=()
+IMAGEdesc=( "ID\t\t\t" "TFTP Directory\t\t" "ROOTFS Directory\t" "Boot Options\t\t" "RAMdisk Size\t\t" "Note\t\t\t" )
+declare -a IMAGEs=()
+declare -a IMAGE=()
+declare -i IMAGElim=4
+IMAGEnme="Image"
+IMAGElbl=IMAGE
+
+#CLIENT vars
+declare -a CLIENTvars=( PID NME IMG NOTE )
+declare -a CLIENTdesc=()
+CLIENTdesc=( "ID\t\t\t" "Profile Name\t" "Image\t\t" "Note\t\t\t" )
+declare -a CLIENTs=()
+declare -a CLIENT=()
+declare -i CLIENTlim=3
+CLIENTnme="Client"
+CLIENTlbl=CLIENT
+
+#NPU Image vars
+declare -a NPU_IMAGEvars=( NPOS TFTP NFSROOT OPTS NOTE )
+declare -a NPU_IMAGEdesc=()
+NPU_IMAGEdesc=( "ID\t\t\t" "TFTP Directory\t\t" "ROOTFS Directory\t" "Boot Options\t\t" "Note\t\t\t" )
+declare -a NPU_IMAGEs=()
+declare -a NPU_IMAGE=()
+declare -i NPU_IMAGElim=4
+NPU_IMAGEnme="NPU Image"
+NPU_IMAGElbl=NPU_IMAGE
+
+#SHELF vars
+declare -a SHELFvars=( SHID IP SLTS MAC PWORD IMV SHV NOTE )
+declare -a SHELFdesc=()
+SHELFdesc=( "ID\t\t" "IP Address\t" "Total Slots\t" "MAC Address\t" "Password\t" "Image Version\t" "Manager Version\t" "Note\t\t" )
+declare -a SHELFs=()
+declare -a SHELF=()
+declare -i SHELFlim=3
+SHELFnme="Shelf"
+SHELFlbl=SHELF
+
+#BLADE vars
+declare -a BLADEvars=( ID MAC TYP SER SHM BSLOT NOTE )
+declare -a BLADEdesc=()
+BLADEdesc=( "ID\t\t" "MAC Address\t" "Model\t\t" "Serial Number\t" "Shelf Manager\t" "Shelf Slot\t" "Note\t\t" )
+declare -a BLADEs=()
+declare -a BLADE=()
+declare -i BLADElim=2
+BLADEnme="Blade"
+BLADElbl=BLADE
+
+#BLADE_CONF vars
+declare -a BLADE_CONFvars=( BCID BID NHID IP HOST ETH PWORD NPCID NOTE )
+declare -a BLADE_CONFdesc=()
+BLADE_CONFdesc=( "ID\t\t" "Blade ID\t" "NHOS Image\t" "IP Address\t" "Hostname\t" "Bootable Eth\t" "Password\t" "NPU Conf ID\t" "Note\t\t" )
+declare -a BLADE_CONFs=()
+declare -a BLADE_CONF=()
+declare -i BLADE_CONFlim=6
+BLADE_CONFnme="Blade Configuration"
+BLADE_CONFlbl=BLADE_CONF
+
+#NPU vars
+declare -a NPUvars=( NPUID MAC TYP SER NOTE )
+declare -a NPUdesc=()
+NPUdesc=( "ID\t\t" "MAC Address\t" "Model\t\t" "Serial Number\t" "Note\t\t" )
+declare -a NPUs=()
+declare -a NPU=()
+declare -i NPUlim=2
+NPUnme="NPU"
+NPUlbl=NPU
+
+#NPU_CONF vars
+declare -a NPU_CONFvars=( NCID NID NPUI NOTE )
+declare -a NPU_CONFdesc=()
+NPU_CONFdesc=( "ID\t\t" "NPU ID\t\t" "NPU Image\t" "Note\t\t" )
+declare -a NPU_CONFs=()
+declare -a NPU_CONF=()
+declare -i NPU_CONFlim=3
+NPU_CONFnme="NPU Configuration"
+NPU_CONFlbl=NPU_CONF
+
+#Temp Current vars
+declare -a CURRvars=()
+declare -a CURRdesc=()
+declare -a CURRs=()
+declare -a CURR=()
+declare -i CURRlim=0
+CURRnme=""
+CURRlbl=""
+CURRid=""
+
+#Temp vars
+declare -a TMPvars=()
+declare -a TMPdesc=()
+declare -a TMPs=()
+declare -a TMP=()
+declare -i TMPlim=0
+TMPnme=""
+TMPlbl=""
+TMPid=""
+
+#Expect Vars
+prompt="(%|#|\\$) $"
+exv1=" timeout {\n
+		exit 1\n
+	} eof {\n
+		exit 1\n
+	}"
+exv=`echo -e ${exv1}`
+
+#####Make sure script is only running one instance#####
+IsRunning () {
+	declare -i pid=$$
+	declare -i x=0
+	declare -i tst=`ps -aef | grep "$0" | grep -cv "grep"`
+	if [ ${tst} -gt 2 ];then
+		echo "Only one instance of the script is allowed to run at one time..."
+		echo "To Exit Type Exit or Quit, to wait just hit Enter"
+		Read stay
+		echo "Waiting for other instance to finish"
+		declare -a arr=("`ps -aef | grep \"$0\" | awk '{FS=\" \"} {print $2}'`")		
+		while [ ${x} -le 25 ];do
+			x=${x}+1
+			sleep 5
+			declare -a arr=("`ps -aef | grep \"$0\" | awk '{FS=\" \"} {print $2}'`")		
+			if [ ${#arr[@]} -le 2 ];then
+				break
+			elif [ "$$" == "${arr[0]}" ];then
+				break	
+			fi
+		done
+		if [ ${x} -eq 25 ];then
+			echo "Done waiting try again later..." && Exit 1
+		fi
+	fi
+}
+
+#Exits Script with status as parameter
+#With deebug=on it lets COMMANDs be given
+Exit() { #Takes exist status as parameter
+	if [ "${deebug}" == "on" ];then
+		echo -e "\nReading in Debug Commands:"
+		Read dbug
+		exit
+	else
+		exit ${1}
+	fi
+}
+
+#Checks that parameter provided is integer within range provided
+#If exit is provided then script should exit 
+IsValidInt() { #Takes 1st parameter to check and 2nd paramater last valid value
+	if [ $# -eq 2 ];then
+		if [ ! $(echo "${1}" | grep -E "^[0-9]+$") ];then
+			return 1
+		elif [ ${1} -gt ${2} ];then
+			return 1
+		elif [ ${1} -lt 1 ];then
+			return 1
+		fi
+		return 0
+	else
+		return 1
+	fi
+}
+
+#Checks that ip address is in correct format
+IsValidIP() { #Takes IP address as only parameter
+	[ $# -gt 1 ] && return 1
+	declare -a ipadr=(`echo ${1} | sed -e "s/\./\\n/g"`)
+	if [ ${#ipadr[@]} -eq 4 ];then
+		for sbn in ${ipadr[@]};do
+			IsValidInt ${sbn} 255
+			[ $? -ne 0 ] && [ "${sbn}" != "0" ] && return 1
+		done
+		return 0
+	fi
+	return 1
+}
+
+#Checks that mac address is in correct format
+IsValidMac() { #Takes MAC Address as only parameter
+	ERROR=0
+	oldIFS=$IFS
+	IFS=:
+	set -f
+	set -- $1
+	if [ $# -eq 6 ]; then
+		for seg; do
+			case $seg in
+				""|*[!0-9a-fA-F]*)
+					ERROR=1
+					break
+				;; # Segment empty or non-hexadecimal
+				??)
+				;; # Segment with 2 caracters are ok
+				*)
+					ERROR=1
+					break
+				;;
+			esac
+		done
+	else
+		ERROR=2 ## Not 6 segments
+	fi
+	IFS=$oldIFS
+	set +f
+	return $ERROR
+}
+
+#Checks for exit or quit to exit application
+#Checks for Command to run
+#Returns parameter stripped of characters
+Read() { #Takes Variable to set and Optional parameter CAP to return capital
+	read nput
+	parsed=$(echo "${nput}" | sed -e s/[\"\'\*\`\;\^\&\%\\]//g)
+	declare -i tst=`echo "${parsed}" | grep -c "^COMMAND "`
+	if [ ${tst} -eq 1 ];then
+		command="`echo ${parsed} | sed -e s/'COMMAND '//`"
+		echo "COMMAND GIVEN - \"${command}\""
+		eval ${command}
+		echo -e "\nEnter More commands with 'COMMAND ' prefix or enter expected value:"
+		Read parsed
+	fi
+	cpchoi=`echo "${parsed}" | tr "[:lower:]" "[:upper:]"`
+	if [ "${cpchoi}" == "EXIT" ] || [ "${cpchoi}" == "QUIT" ];then
+		echo "Exiting..."
+		exit 0
+	fi
+	if [ "${2}" == "CAP" ];then
+		parsed=`echo "${parsed}" | tr \"[:lower:]\" \"[:upper:]\"`
+	fi
+	eval ${1}=\"${parsed}\"
+}
+
+#Returns parameter stripped of characters
+Strip() { #Takes 1 parameter
+	stripped=$(echo "${1}" | sed -e s/[\"\'\*\`\;\^\&\%\\]//g)
+	echo ${stripped}
+}
+
+#Print Dots while doing stuff
+PrintDots() { #Takes message as only parameter
+	printf "$1"
+	while [ 1 -eq 1 ];do
+		printf .
+		sleep 1
+	done
+}
+
+#Kills PrintDots job
+#Expects PrintDots to be Running
+KillIt() { #Takes job id as only parameter
+	kill -STOP ${1} > /dev/null 2>&1
+	pkill -9 PrintDots > /dev/null 2>&1
+	kill ${1} > /dev/null 2>&1
+}
+
+#Returns 0 if IP is pingable and 1 if not pingable
+#NEEDS - global var defaulteth to define eth of server for clients
+TestIp() { #Takes IP as Parameter to check
+	if [ $# -ne 1 ];then
+		echo "TestIp: Incorrect parameters passed - Exiting" && Exit 1
+	else
+		IsValidIP ${1}
+		if [ $? -ne 0 ];then
+			echo "TestIp: \"${1}\" Is not an IP" && return 1
+		fi
+	fi
+	declare -i ptst=`ping -I ${defaulteth} -c 1 ${1} 2>&1 | grep -c "^[0-9].*${1}"`
+	if [ ${ptst} -gt 0 ];then
+		return 0
+	else
+		return 1
+	fi
+}
+
+#Gets Shelf Manager IP's and sets shelips()
+#NEEDS - global array shelips() to store all shelfs found
+#NEEDS - global var sheip to define shelf manager subnet
+#NEEDS - global var defaulteth to define eth of server for clients
+SetShms() { #Takes NO Parameters
+	shelips=()
+	shelips=(`ping -I ${defaulteth} -b -c 2 -n ${sheip}255 2>&1 | \
+		grep -o "${sheip}[0-9]*" | \
+		grep -v "${sheip}1\|${sheip}255" | \
+		sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n`)
+}
+
+#Gets number of slots from shelf and sets slots()
+#NEEDS - ShmCon function to log into shelf
+#NEEDS - global array slots() to store slots found
+SetSlots() { #Takes shelf manager IP and password as parameters
+	slots=()
+	slots=(`ShmCon $1 "clia shelf at" "${2}" | \
+		grep "AdvancedTCA Board" | \
+		sed -e s/".*# "// -e s/",.*"// | \
+		sort -n`)
+}
+
+#Gets Blade IP's and sets bladips()
+#NEEDS - global array bladips() to store all blades found
+#NEEDS - global var cliip to define client subnet
+#NEEDS - global var defaulteth to define eth of server for clients
+SetBlades() { #Takes NO Parameters
+	bladips=()
+	bladips=(`ping -I ${defaulteth} -b -c 2 -n ${cliip}255 2>&1 | \
+		grep -o "${cliip}[0-9]*" | \
+		grep -v "${cliip}254\|${cliip}255" | \
+		sort -t . -k 1,1n -k 2,2n -k 3,3n -k 4,4n`)
+}
+
+#Changes Range for cliip or sheip
+#NEEDS - global var cliip to define client subnet
+#NEEDS - global var sheip to define shelf manager subnet
+#NEEDS - global array TMP to be set
+ChangeRange() { #Takes 1 - cliip or 2 - sheip for Range to change
+	clear
+	if [ "${1}" == "1" ];then
+		wha="${BLADEnme} IP Range"
+		rvar=cliip
+		defau=197\.1\.1\.
+	elif [ "${1}" == "2" ];then
+		wha="${SHELFnme} IP Range"
+		rvar=sheip
+		defau=192\.168\.0\.
+	else
+		echo "ChangeRange: Incorrect parameter \"${1}\" passed - Exiting"
+		Exit 1
+	fi
+	echo -e "Set new ${wha}:"
+	declare -i x=0
+	declare -a tmp=( first second third )
+	while [ ${x} -lt 3 ];do
+		echo -e "Enter ${tmp[${x}]} range 0 to 255, or \"default\" to reset"
+		Read ropt
+		if [ "${ropt}" == "default" ];then
+			break
+		else
+			opt=$(echo "${ropt}" | grep -E "^[0-9]+$")
+			if [ -n "${opt}" ];then
+				eval declare -i ${tmp[${x}]}=${opt}
+				if [ `eval echo ${!tmp[${x}]}` -le 255 ];then
+					x=${x}+1
+				else
+					echo "\"${ropt}\" - Invalid Entry..." && sleep 1
+				fi
+			else
+				echo "\"${ropt}\" - Invalid Entry..." && sleep 1
+			fi
+		fi
+	done
+	if [ "${ropt}" == "default" ];then
+		echo "Resetting to Default value"
+		eval ${rvar}=${defau}
+	else
+		ran=${first}\.${second}\.${third}\.
+		eval ${rvar}=${ran}
+	fi
+	echo -e "${wha} now set to - ${!rvar}*" 
+	echo -e "To Change this Setting Permanently, Change your Server Client and Shelf IP Configuration" && sleep 1
+}
+
+#Returns 0 if only 1 entry exists for a given id
+#Returns 1 if no entry is found
+#Returns 2 if multiple entries are found for a given id
+#Returns 3 if no entries for a given type is found
+DoesExist() { #Takes up to 3 Parameters - 1 ID to search - 2 Type to display - optional 3 Value to Search
+	if [ $# -eq 3 ];then
+		deide=${3}
+	elif [ $# -eq 2 ];then
+		deide=".*"
+	else
+		echo "DoesExist: Incorrect parameters passed - Exiting"
+		Exit 1
+	fi
+	declare -i chkid=`grep -c "^${1}=${deide}$" ${fle}`
+	if [ ${chkid} -lt 1 ] && [ $# -eq 3 ];then
+		messge="No entry for ${2} \"${deide}\" found"
+		return 1
+	elif [ ${chkid} -gt 1 ] && [ $# -eq 3 ];then
+		messge="Mulitple entries \"${chkid}\" for ${2} \"${deide}\" found"
+		return 2
+	elif [ ${chkid} -lt 1 ] && [ $# -eq 2 ];then
+		messge="No ${2} entries found"
+		return 3
+	else
+		messge="One entry for ${2} \"${deide}\" found"
+		return 0
+	fi
+}
+
+#Get hostname
+GetHostname() {
+	echo "${HOSTNAME}"
+}
+
+#Get dhcpd eth
+GetDETH() {
+	deth=""
+	dethfle=/etc/sysconfig/dhcpd
+	[ -e "${dethfle}" ] && deth="`egrep -o \"eth[0-9]+\" ${dethfle}`"
+	echo "${deth}"
+}
+
+#TFTP Dir from Server
+GetTFTPDir() {
+	tftpdir=""
+	tftpfle=/etc/xinetd.d/tftp
+	[ -e "${tftpfle}" ] && tftpdir="`grep -v "#" ${tftpfle} | grep -m 1 "server_args" | grep -o "/.*"`"
+	declare -i tsttf=`echo ${tftpdir} | grep -c "/$"`
+	[ ${tsttf} -eq 0 ] && tftpdir="${tftpdir}/"
+	echo "${tftpdir}"
+}
+
+#Check TFTP Dir on Server
+CheckTFTPDir() {
+	tftpfle=/etc/xinetd.d/tftp
+	if [ -e "${tftpfle}" ];then
+		tftpdir="`grep -v '#' ${tftpfle} | grep -m 1 'server_args' | grep -o \"/.*\"`"
+		[ -z "${tftpdir}" ] && echo "No TFTP directory defined"
+		[ -d "${tftpdir}" ] || echo "No TFTP directory does not exist"
+		return 0
+	else
+		echo "TFTP Configuration file \"${tftpfle}\" - Not Found"
+	fi
+	return 1
+}
+
+#Get Diskless Directory
+GetDisklessDir() {
+	disdir=""
+	[ -d "/local/diskless" ] && disdir="/local/diskless/"
+	[ -d "/local/home/diskless" ] && disdir="/local/home/diskless/"
+	echo "${disdir}"
+}
+
+#Get Dhcpd IP
+GetDHCPIP() {
+	dieth=`GetDETH`
+	[ -z "${dieth}" ] && return 1
+	dhip=`ifconfig ${dieth} | grep -o "inet addr.*" | egrep -o ":[0-9.]+" | grep -o -m 1 "[0-9].*"`
+	echo "${dhip}"
+}
+
+#Get Shelf IP
+GetShelfIP() {
+	sheth="`GetDETH`":0
+	[ -z "${sheth}" ] && return 1
+	ship=`ifconfig ${sheth} | grep -o "inet addr.*" | egrep -o ":[0-9.]+" | grep -o -m 1 "[0-9].*"`
+	echo "${ship}"
+}
+
+#Set Server variables
+SetServer() {
+	DoesExist SID Server ".*"
+	declare -i res=$?
+	if [ ${res} -eq 3 ];then
+		echo "Multiple Server Entries found - There should only be one"
+		Exit 1
+	elif [ ${res} -eq 0 ];then
+		echo "Server Entry - Confirmed" && sleep 1
+		return 0
+	elif [ ${res} -eq 1 ];then
+		echo "Creating Server Entry in Configuration file"
+	fi
+	SERVER[0]="east_server"
+	tind=`GetIndex SERVER HNME`
+	SERVER[1]="`GetHostname`"
+	CheckTFTPDir
+	if [ $? -eq 0 ];then
+		SERVER[2]="`GetTFTPDir`"
+	else
+		echo -e "The TFTP configuration on this server is not configured or is foreign"
+		echo -e "Please configure it correctly or manually enter your tftp path"
+		Exit 1
+	fi
+	tind=`GetIndex SERVER NFSROOT`
+	SERVER[${tind}]="`GetDisklessDir`"
+	tind=`GetIndex SERVER ETH`
+	SERVER[${tind}]="`GetDETH`"
+	tind=`GetIndex SERVER CLIP`
+	SERVER[${tind}]="`GetDHCPIP`"
+	tind=`GetIndex SERVER SHIP`
+	SERVER[${tind}]="`GetShelfIP`"
+	tind=`GetIndex SERVER NOTE`
+	SERVER[${tind}]="Server Configuration AUTO Populated"
+	SetData SERVER SAVEAS
+	[ $? -ne 0 ] && echo -e "Hit Enter To Continue:" && Read nothing
+}
+
+#Set the global vars using the server
+SetGlobalVars() {
+	GetIt SERVER
+	GetIt SERVER ${SERVERs[0]}
+	declare -i tstsl
+	tind=`GetIndex SERVER TFTP`
+	if [ -n "${tind}" ] && [ -n "${SERVER[${tind}]}" ];then
+		defaulttftp=${SERVER[${tind}]}
+		tstsl=`echo ${defaulttftp} | grep -c "/$"`
+		[ ${tstsl} -eq 0 ] && defaulttftp="${defaulttftp}/"
+	fi
+	tind=`GetIndex SERVER NFSROOT`
+	if [ -n "${tind}" ] && [ -n "${SERVER[${tind}]}" ];then
+		defaultdisk=${SERVER[${tind}]}
+		tstsl=`echo ${defaultdisk} | grep -c "/$"`
+		[ ${tstsl} -eq 0 ] && defaultdisk="${defaultdisk}/"
+	fi
+	tind=`GetIndex SERVER ETH`
+	[ -n "${tind}" ] && [ -n "${SERVER[${tind}]}" ] && \
+		defaulteth=${SERVER[${tind}]}
+	tind=`GetIndex SERVER CLIP`
+	[ -n "${tind}" ] && [ -n "${SERVER[${tind}]}" ] && \
+		cliip=`echo ${SERVER[${tind}]} | grep -o ".*\." | sed -e 's/\./\\./g'`
+	tind=`GetIndex SERVER SHIP`
+	[ -n "${tind}" ] && [ -n "${SERVER[${tind}]}" ] && \
+		sheip=`echo ${SERVER[${tind}]} | grep -o ".*\." | sed -e 's/\./\\./g'`
+}
+
+#Creates Config file
+CreateConfig() {
+	[ -e ${fle} ] && \rm -f ${fle}
+	for entry in ${entrytypes[@]};do
+		echo "#START ${entry} ENTRIES#" >> ${fle}
+		echo "#####" >> ${fle}
+		echo "#END ${entry} ENTRIES#" >> ${fle}
+	done
+	echo "Configuration file ${fle} Created" && sleep 1
+	echo "Auto Configure System?"
+	echo -e "\tEnter \"Yes\" to Auto Configure or Anything to Skip"
+	Read autoconf CAP
+	if [ "${autoconf}" == "YES" ];then
+		AutoConfigure
+	fi
+	CheckConfig
+}
+
+#Creates Config file entry for given type
+AddConfigEntry() { #Takes Type as parameter
+	[ ! -e ${fle} ] && echo "Configuration file ${fle} doesnt exist" && Exit 1
+	declare -i z=0
+	while [ ${z} -lt ${#entrytypes[@]} ];do
+		entry=${entrytypes[${z}]}
+		if [ "${entry}" == "${1}" ];then
+			elns=""
+			declare -i x=${z}+1
+			while [ ${x} -lt ${#entrytypes[@]} ];do
+				tmpe=${entrytypes[${x}]}
+				elns=`sed -n "/^#START ${tmpe} ENTRIES#$/=" ${fle}`
+				tent="#START ${tmpe} ENTRIES#"
+				[ -n "${elns}" ] && break 1
+				x=${x}+1
+			done
+			if [ -n "${elns}" ];then
+				sed -i "/^${tent}$/ i\
+#START ${entry} ENTRIES#\n\
+#####\n\
+#END ${entry} ENTRIES#" ${fle}
+				return 0
+			else
+				echo "#START ${entry} ENTRIES#" >> ${fle}
+				echo "#####" >> ${fle}
+				echo "#END ${entry} ENTRIES#" >> ${fle}
+				return 0
+			fi
+		fi
+		z=${z}+1
+	done
+	echo -e "AddConfigEntry: Incorrect Type \"${1}\" Passed" && Exit 1
+}
+
+#Verify Configuration file exists and is in the correct format
+CheckConfig() { #Takes 1 paramater to not clear and show initial echo
+	if [ $# -eq 0 ];then
+		clear
+		echo -e "Verifying Configuration file..."
+	fi
+	if [ -e "${fle}" ];then
+		echo "Checking ${fle}"
+		sed -i '/^$/d' ${fle} #Empty lines deleted
+		declare -i lncnt=`cat ${fle} | \
+			grep -v "^#START.*ENTRIES#$\|^#END.*ENTRIES#$\|^#####$\|^$" | \
+			egrep -v "^[A-Z]+=" | \
+			wc -l`
+		if [ ${lncnt} -ne 0 ];then
+			echo -e "Configuration file ${fle} is not formatted correctly - Exiting"
+			Exit 1
+		fi
+		declare -i misng=0
+		for entry in ${entrytypes[@]};do
+			declare -i cctst=`grep -c "#.* ${entry} ENTRIES#" ${fle}`
+			if [ ${cctst} -eq 0 ];then
+				echo -e "\t\"${entry}\" Entry is missing"
+				misng=${msng}+1
+				AddConfigEntry "${entry}"
+				echo -e "\tAdded missing Entry for \"${entry}\""
+			elif [ ${cctst} -ne 2 ];then
+				echo -e "Configuration file ${fle} is not formatted correctly"
+				echo -e "\tInvalid entries in ${fle} for \"${entry}\" - Exiting"
+				Exit 1
+			fi
+		done
+		if [ ${misng} -gt 0 ];then
+			CheckConfig 1
+		else
+			echo "Format appears to be correct" && sleep 1
+			SetServer
+			SetGlobalVars
+		fi
+	else
+		echo "Configuration file - ${fle} not Found"
+		echo "Select an option:"
+		echo -e "\t1 - Create Configuration file ${fle}"
+		echo -e "\t2 - Use Different Configuration file"
+		echo -e "\tEnter or Exit - Exit"
+		echo "Enter Choice:"
+		Read opt
+		IsValidInt "${opt}" 3
+		if [ $? -eq 0 ];then
+			[ "${opt}" == "1" ] && CreateConfig
+			if [ "${opt}" == "2" ];then
+				echo -e "Enter new path for Configuration File:"
+				Read nfle
+				if [ -e "${nfle}" ];then
+					fle="${nfle}"
+					CheckConfig
+				else
+					echo "${nfle} Invalid File..." && sleep 1
+					CheckConfig
+				fi
+			fi
+		elif [ -z "${opt}" ];then
+			echo "Exiting..."
+			Exit 0
+		else
+			echo "Invalid Choice..." && sleep 1
+			CheckConfig
+		fi
+	fi
+}
+
+SetVars() { #Takes entry type as Parameter 2 parameters sets TMP
+	if [ $# -lt 1 ];then
+		echo "SetVars: Incorrect parameters passed - Returning"
+		return 1
+	fi
+	sfx=""
+	for entry in ${entrytypes[@]};do
+		if [ "${entry}" == "${1}" ];then
+			sfx=${entry}
+			break
+		fi
+	done
+	if [ -z "${sfx}" ];then
+		echo "SetVars: Invalid parameter \"$1\" passed - Retuning"
+		return 1
+	fi
+	if [ $# -eq 1 ];then
+		eval CURRnme=$\{${sfx}nme}
+		eval CURRvars=(\"$\{${sfx}vars[@]\}\")
+		eval CURRdesc=(\"$\{${sfx}desc[@]\}\")
+		eval CURRlbl=$\{${sfx}lbl}
+		eval CURRlim=$\{${sfx}lim}
+		CURR=${sfx}
+		CURRs=${sfx}s
+		CURRid=${CURRvars[0]}
+	else
+		eval TMPnme=$\{${sfx}nme}
+		eval TMPvars=(\"$\{${sfx}vars[@]\}\")
+		eval TMPdesc=(\"$\{${sfx}desc[@]\}\")
+		eval TMPlbl=$\{${sfx}lbl}
+		eval TMPlim=$\{${sfx}lim}
+		TMP=${sfx}
+		TMPs=${sfx}s
+		TMPid=${TMPvars[0]}
+	fi
+}
+
+#Get index of parameter
+GetIndex() { #Takes 2 parameters type and Label to search for
+	if [ $# -eq 2 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] &&	echo "GetIndex: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "GetIndex: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	declare -i z=0
+	while [ ${z} -lt ${#TMPdesc[@]} ];do
+		cmpar=`echo -e ${TMPdesc[${z}]} | sed -e 's/\t//g'`
+		if [ "${2}" == "${cmpar}" ];then
+			echo ${z}
+			break
+		fi
+		cmpar=`echo ${TMPvars[${z}]}`
+		if [ "${2}" == "${cmpar}" ];then
+			echo ${z}
+			break
+		fi
+		z=${z}+1
+	done
+	return 1
+}
+
+#Main Menu for traversing program
+ShowMenu() { #Takes Choice as parameter
+	choice=${1}
+	indi=false
+	sindi=false
+	pick=""
+	spick=""
+	opt=""
+	srchstr=""
+	schide=""
+	while [ -n "$choice" ];do
+		clear
+		case ${choice} in
+			"MAIN")
+				echo "Select an option:"
+				echo -e "\t1 - Server"
+				echo -e "\t2 - NHOS Images"
+				echo -e "\t3 - Clients"
+				echo -e "\t4 - NPU Images"
+				echo -e "\t5 - Shelfs"
+				echo -e "\t6 - Blades"
+				echo -e "\t7 - NPUs"
+				echo -e "\tEnter or Exit - Exit"
+				echo "Enter Choice:"
+				Read opt
+				IsValidInt "${opt}" 7
+				if [ $? -eq 0 ];then
+					[ "${opt}" == "1" ] && choice=${SERVERlbl}
+					[ "${opt}" == "2" ] && choice=${IMAGElbl}
+					[ "${opt}" == "3" ] && choice=${CLIENTlbl}
+					[ "${opt}" == "4" ] && choice=${NPU_IMAGElbl}
+					[ "${opt}" == "5" ] && choice=${SHELFlbl}
+					[ "${opt}" == "6" ] && choice=${BLADElbl}
+					[ "${opt}" == "7" ] && choice=${NPUlbl}
+				elif [ -z "${opt}" ];then
+					echo "Exiting..."
+					Exit 0
+				else
+					echo "Invalid Choice..." && sleep 1
+					choice=MAIN
+				fi
+			;;
+			"${SERVERlbl}")
+				nme=${SERVERnme}
+				bnme=${SERVERnme}
+				lbl=${SERVERlbl}
+				blbl=${SERVERlbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Auto Configure System"
+				echo -e "\t2 - List/Edit ${nme} Configuration"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read sopt
+				IsValidInt "${sopt}" 2
+				if [ $? -eq 0 ];then
+					case ${sopt} in
+						"1")
+							AutoConfigure
+							choice=${lbl};;
+						"2")
+							choice=LIST
+							opt=${lbl};;
+					esac
+				elif [ -z "${sopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${IMAGElbl}")
+				nme=${IMAGEnme}
+				bnme=${IMAGEnme}
+				lbl=${IMAGElbl}
+				blbl=${IMAGElbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Manually Add Diskless ${nme}"
+				echo -e "\t2 - Install/Upgrade Diskless ${nme} from Archive"
+				echo -e "\t3 - Check for Installed Diskless ${nme}s"
+				echo -e "\t4 - List/Edit Configured Diskless ${nme}s"
+				echo -e "\t5 - Show Configured Diskless ${nme}s Release Notes"
+				echo -e "\t6 - Search ${nme}s"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read iopt
+				IsValidInt "${iopt}" 6
+				if [ $? -eq 0 ];then
+					case ${iopt} in
+						"1")
+							AddData ${lbl}
+							choice=LIST
+							opt=${lbl};;
+						"2")
+							ImageUpgradeInstall "${IMAGElbl}"
+							choice=${lbl};;
+						"3")
+							CheckImages ${lbl}
+							choice=${lbl};;
+						"4")
+							choice=LIST
+							opt=${lbl};;
+						"5")
+							ShowNHuname
+							choice=${lbl};;
+						"6")
+							choice=SEARCH
+							opt=${lbl};;
+					esac
+				elif [ -z "${iopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${CLIENTlbl}")
+				nme=${CLIENTnme}
+				bnme=${CLIENTnme}
+				lbl=${CLIENTlbl}
+				blbl=${CLIENTlbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Export Diskless ${nme}s"
+				echo -e "\t2 - Import Diskless ${nme}s"
+				echo -e "\t3 - Check for Diskless ${nme}s"
+				echo -e "\t4 - List/Edit Diskless ${nme}s"
+				echo -e "\t5 - Search ${nme}s"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read popt
+				IsValidInt "${popt}" 5
+				if [ $? -eq 0 ];then
+					case ${popt} in
+						"1")
+							ExportClients
+							choice=${lbl};;
+						"2")
+							ImportClients
+							choice=${lbl};;
+						"3")
+							CheckClients
+							choice=${lbl};;
+						"4")
+							choice=LIST
+							opt=${lbl};;
+						"5")
+							choice=SEARCH
+							opt=${lbl};;
+					esac
+				elif [ -z "${popt}"];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${SHELFlbl}")
+				nme=${SHELFnme}
+				bnme=${SHELFnme}
+				lbl=${SHELFlbl}
+				blbl=${SHELFlbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Add New ${nme} Configuration"
+				echo -e "\t2 - Check for available ${nme}s"
+				echo -e "\t3 - List/Edit Configured ${nme}s"
+				echo -e "\t4 - Search ${nme}s"
+				#Need to be able to set shelf IP and configure logging as well as other shelf functions
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read sopt
+				IsValidInt "${sopt}" 4
+				if [ $? -eq 0 ];then
+					case ${sopt} in
+						"1")
+							AddData ${lbl}
+							choice=LIST
+							opt=${lbl};;
+						"2")
+							CheckIP ${lbl}
+							choice=${lbl};;
+						"3")
+							choice=LIST
+							opt=${lbl};;
+						"4")
+							choice=SEARCH
+							opt=${lbl};;
+					esac
+				elif [ -z "${sopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${BLADElbl}")
+				nme=${BLADEnme}
+				bnme=${BLADEnme}
+				lbl=${BLADElbl}
+				blbl=${BLADElbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Activate ${BLADE_CONFnme}"
+				echo -e "\t2 - Add New ${nme}"
+				echo -e "\t3 - Add New ${BLADE_CONFnme}"
+				echo -e "\t4 - Check for Active ${nme}s"
+				echo -e "\t5 - List/Edit ${nme}s"
+				echo -e "\t6 - List/Edit ${BLADE_CONFnme}s"
+				echo -e "\t7 - Search ${nme}s"
+				echo -e "\t8 - Search ${BLADE_CONFnme}s"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read bopt
+				IsValidInt "${bopt}" 8
+				if [ $? -eq 0 ];then
+					case ${bopt} in
+						"1")
+							SetConfigureBlade
+							choice=${lbl};;
+						"2")
+							AddData ${lbl}
+							choice=LIST
+							opt=${lbl};;
+						"3")
+							nme=${BLADE_CONFnme}
+							AddData ${BLADE_CONFlbl}
+							choice=LIST
+							opt=${BLADE_CONFlbl};;
+						"4")
+							CheckIP ${lbl}
+							choice=${lbl};;
+						"5")
+							choice=LIST
+							opt=${lbl};;
+						"6")
+							nme=${BLADE_CONFnme}
+							choice=LIST
+							opt=${BLADE_CONFlbl};;
+						"7")
+							choice=SEARCH
+							opt=${lbl};;
+						"8")
+							nme=${BLADE_CONFnme}
+							choice=SEARCH
+							opt=${BLADE_CONFlbl};;
+					esac
+				elif [ -z "${bopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${NPU_IMAGElbl}")
+				nme=${NPU_IMAGEnme}
+				bnme=${NPU_IMAGEnme}
+				lbl=${NPU_IMAGElbl}
+				blbl=${NPU_IMAGElbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Manually Add ${nme}"
+				echo -e "\t2 - Install ${nme} from Archive"
+				echo -e "\t3 - Check for Installed ${nme}s"
+				echo -e "\t4 - List/Edit Configured ${nme}s"
+				echo -e "\t5 - Search ${nme}s"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read niopt
+				IsValidInt "${niopt}" 5
+				if [ $? -eq 0 ];then
+					case ${niopt} in
+						"1")
+							AddData ${lbl}
+							choice=LIST
+							opt=${lbl};;
+						"2")
+							ImageUpgradeInstall "${NPU_IMAGElbl}"
+							choice=${lbl};;
+						"3")
+							CheckImages ${lbl}
+							choice=${lbl};;
+						"4")
+							choice=LIST
+							opt=${lbl};;
+						"5")
+							choice=SEARCH
+							opt=${lbl};;
+					esac
+				elif [ -z "${niopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"${NPUlbl}")
+				nme=${NPUnme}
+				bnme=${NPUnme}
+				lbl=${NPUlbl}
+				blbl=${NPUlbl}
+				echo "Select ${nme} option:"
+				echo -e "\t1 - Add New ${nme}"
+				echo -e "\t2 - Add New ${NPU_CONFnme}s"
+				#echo -e "\t3 - Check for Active NPUs" - Not Supported yet
+				echo -e "\t3 - List/Edit ${nme}s"
+				echo -e "\t4 - List/Edit ${NPU_CONFnme}s"
+				echo -e "\t5 - Search ${nme}s"
+				echo -e "\t6 - Search ${NPU_CONFnme}s"
+				echo -e "\tEnter - Back to Main Menu"
+				echo "Enter Choice:"
+				Read nopt
+				IsValidInt "${nopt}" 6
+				if [ $? -eq 0 ];then
+					case ${nopt} in
+						"1")
+							AddData ${lbl}
+							choice=LIST
+							opt=${lbl};;
+						"2")
+							nme=${NPU_CONFnme}
+							AddData ${NPU_CONFlbl}
+							choice=LIST
+							opt=${NPU_CONFlbl};;
+						"3")
+							choice=LIST
+							opt=${lbl};;
+						"4")
+							nme=${NPU_CONFnme}
+							choice=LIST
+							opt=${NPU_CONFlbl};;
+						"5")
+							choice=SEARCH
+							opt=${lbl};;
+						"6")
+							nme=${NPU_CONFnme}
+							choice=SEARCH
+							opt=${NPU_CONFlbl};;
+					esac
+				elif [ -z "${nopt}" ];then
+					choice=MAIN
+				else
+					echo "Invalid ${nme} Choice..." && sleep 1
+					choice=${lbl}
+				fi
+			;;
+			"LIST") 
+				SetVars "${opt}"
+				if [ $? -ne 0 ];then
+					echo "MAIN.LIST: Incorrect Type passed \"${opt}\""
+					if [ "${indi}" == "true" ];then
+						choice=LIST
+						indi=false
+					else
+						choice=MAIN
+					fi
+				fi				
+				if [ "${indi}" == "true" ];then
+					if [ -z "${schide}" ];then
+						declare -i indx=$(( ${pick}-1 ))
+						eval tvar=$\{${CURRs}[${indx}]}
+					else
+						tvar=${schide}
+					fi
+					echo "${nme} \"${tvar}\" Details:"
+					ShowIt ${opt} ${tvar}
+					echo -e "\t\t1 - Edit ${nme} \"$(eval echo "\${${CURR}[0]}")\""
+					echo -e "\t\t2 - Back to ${nme} List"
+					echo -e "\t\t3 - Back to ${bnme} Menu"
+					echo -e "\t\tEnter - Back to Main Menu"
+					echo "Enter Choice:"
+					Read dlopt
+					IsValidInt "${dlopt}" 3
+					if [ $? == 0 ];then
+						if [ "${dlopt}" == "1" ];then
+							EditData ${opt} ${tvar}
+							choice=LIST
+							indi=false
+							schide=""
+						elif [ "${dlopt}" == "2" ];then
+							choice=LIST
+							indi=false
+							schide=""
+						elif [ "${dlopt}" == "3" ];then
+							choice=${blbl}
+							indi=false
+							schide=""
+						fi
+					elif [ -z "${dlopt}" ];then
+						choice=MAIN
+						indi=false
+						schide=""
+					else
+						echo "Invalid Choice..." && sleep 1
+						choice=LIST
+						indi=true
+					fi
+				else
+					echo "Select a ${nme} to View or Edit:"
+					ShowIt ${opt}
+					eval declare -i max=$\{#${CURRs}[@]}
+					echo -e "\t\tA - Back to ${bnme} Menu"
+					echo -e "\t\tEnter - Back to Main Menu"
+					echo "Enter Choice:"
+					Read pick CAP
+					IsValidInt "${pick}" ${max}
+					if [ $? == 0 ];then
+						choice=LIST
+						indi=true
+					elif [ -z "${pick}" ];then
+						choice=MAIN
+						indi=false	
+					elif [ "${pick}" == "A" ];then
+						choice=${blbl}
+						indi=false
+					else
+						echo "Invalid Choice..." && sleep 1
+						choice=LIST
+						indi=false
+					fi
+				fi
+			;;
+			"SEARCH") 
+				SetVars "${opt}"
+				if [ $? -ne 0 ];then
+					echo "MAIN.SEARCH: Incorrect Type passed \"${opt}\""
+					if [ "${sindi}" == "true" ];then
+						choice=SEARCH
+						sindi=false
+					else
+						choice=MAIN
+					fi
+				fi
+				schide=""
+				if [ "${sindi}" == "true" ];then
+					declare -i indx=$(( ${spick}-1 ))
+					if [ ${indx} -eq ${#CURRvars[@]} ];then
+						tvar=""
+					else
+						tvar=${CURRvars[${indx}]}
+					fi
+					SearchData ${CURRlbl} "${srchstr}" ${tvar}
+					echo "${nme} Search Results for \"${srchstr}\":"
+					declare -i zz=0
+					declare -i zt=${#searchar[@]}
+					while [ ${zz} -lt ${zt} ];do
+						svar=${searchar[${zz}]}
+						zz=${zz}+1
+						echo -e "\t${zz} - ${nme}\t${svar}"
+					done
+					if [ ${zt} -eq 0 ];then
+						echo -e "\tSearch Returned Nothing"
+					fi
+					echo -e "\t\tA - Back to ${nme} Search"
+					echo -e "\t\tB - Back to ${bnme} Menu"
+					echo -e "\t\tEnter - Back to Main Menu"
+					echo "Enter Choice:"
+					Read dlopt CAP
+					IsValidInt "${dlopt}" 3
+					if [ $? == 0 ];then
+						choice=LIST
+						schide=${searchar[$(( ${dlopt}-1 ))]}
+						indi=true
+						sindi=false
+					elif [ "${dlopt}" == "A" ];then
+						choice=SEARCH
+						sindi=false
+					elif [ "${dlopt}" == "B" ];then
+						choice=${blbl}
+						sindi=false
+					elif [ -z "${dlopt}" ];then
+						choice=MAIN
+						sindi=false	
+					else
+						echo "Invalid Choice..." && sleep 1
+						choice=SEARCH
+						sindi=true
+					fi
+				else
+					echo "Select a ${nme} Parameter to Search:"
+					declare -i s=0
+					declare -i siz=${#CURRvars[@]}
+					while [ ${s} -lt ${siz} ];do
+						descr=`echo -e ${CURRdesc[${s}]} | sed -e 's/\t//g'`
+						s=${s}+1
+						echo -e "\t${s} - ${nme}\t${descr}"
+					done
+					s=${s}+1
+					echo -e "\t${s} - ${nme}\tALL Parameters"
+					echo -e "\t\tA - Back to ${bnme} Menu"
+					echo -e "\t\tEnter - Back to Main Menu"
+					echo "Enter Choice:"
+					Read spick CAP
+					IsValidInt "${spick}" ${s}
+					if [ $? == 0 ];then
+						echo -e "\nEnter Search String:"
+						Read srchstr
+						if [ -z "${srchstr}" ];then
+							echo "Invalid Search String..." && sleep 1
+							choice=SEARCH
+							sindi=false
+						else
+							choice=SEARCH
+							sindi=true
+						fi
+					elif [ -z "${spick}" ];then
+						choice=MAIN
+						sindi=false
+					elif [ "${spick}" == "A" ];then
+						choice=${blbl}
+						sindi=false
+					else
+						echo "Invalid Choice..." && sleep 1
+						choice=SEARCH
+						indi=false
+					fi
+				fi
+			;;
+			* )
+				echo "MAIN: Invalid Type \"$1\" passed - Exiting" && Exit 1
+			;;
+		esac
+	done
+}
+
+#Select or Enter TFTP or NFSROOT directory
+SelectDir() { #Takes Type and (TFTP or NFSROOT)
+	if [ $# -eq 2 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] &&	echo "SelectDir: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "SelectDir: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	if [ "${2}" == "TFTP" ];then
+		srch='vmlinu*'
+		opps='-maxdepth 2'
+		cmd="xargs -i echo {}"
+		cmdt="sed -e 's/^\///'"
+		if [ "${1}" == "${IMAGElbl}" ];then
+			srch='vmlinuz'
+			cmd="sed -r 's/(.*)\/.*/\1/'"
+		elif [ "${1}" == "${NPU_IMAGElbl}" ];then
+			srch='vmlinux*'
+		fi
+		typ="-type f"
+	elif [ "${2}" == "NFSROOT" ];then
+		srch='root*'
+		opps='-mindepth 2 -maxdepth 3'
+		cmd="xargs -i echo {}"
+		cmdt="sed -e 's/^\///'"
+		if [ "${1}" == "${IMAGElbl}" ];then
+			srch='#'
+			opps='-mindepth 2 -maxdepth 4'
+			cmd="sed -r 's/(.*)\/.*/\1/' | sed -r 's/(.*)\/.*/\1/'"
+			#cmdt="sed -r 's/(.*)\/.*/\1/'"
+		elif [ "${1}" == "${NPU_IMAGElbl}" ];then
+			srch='octeon_rootnfs'
+		fi
+		typ="-type d"
+	else
+		echo "SelectTFTP: Incorrect parameter \"${2}\" passed - Exiting" && Exit 1
+	fi
+	indx=`GetIndex ${TMPlbl} ${2}`
+	ipindx=`GetIndex SERVER CLIP`
+	drindx=`GetIndex SERVER ${2}`
+	descr=`echo -e ${TMPdesc[${indx}]} | sed -e 's/\t//g'`
+	srip=${SERVER[${ipindx}]}
+	srdr=${SERVER[${drindx}]}
+	declare -a dirds=()
+	if [ -d "${srdr}" ];then
+		dirds=("nothing" $(find ${srdr} -name "${srch}" ${tpe} ${opps} -prune | \
+			sed -e s/"$(echo ${srdr} | sed -e s/"\/"/"\\\\\/"/g)"//g | \
+			eval ${cmd} | eval ${cmdt} | \
+			grep -v " " | sort | uniq))
+	fi
+	echo -e "${descr} should be the path after ${srip}:${srdr}/"
+	if [ ${#dirds[@]} -gt 1 ];then
+		declare -i int=1
+		echo -e "Choose from one of the directories found or Enter your own directory"
+		while [ ${int} -lt ${#dirds[@]} ];do
+			echo -e "\t${int} - ${dirds[${int}]}"
+			int=${int}+1
+		done
+	fi
+	if [ "${2}" == "NFSROOT" ];then
+		echo -e "To enter a different location all together start with the IP:"
+	fi
+	echo -e "Enter the Option value or Path for ${TMPnme} ${descr}:"
+	max=${#dirds[@]}
+	Read dropt
+	IsValidInt "${dropt}" ${max}
+	if [ $? -eq 0 ];then
+		chkdir="${srdr}/${dirds[${dropt}]}"
+		if [ -e "${chkdir}" ];then
+			eval $TMP[${indx}]=\"${dirds[${dropt}]}\"
+			return
+		fi
+	elif [ ! -z "${dropt}" ];then
+		chkdir="${srdr}/${dropt}"
+		if [ -e "${chkdir}" ];then
+			eval $TMP[${indx}]=\"${dropt}\"
+			return
+		elif [ "${2}" == "NFSROOT" ];then
+			declare -i ctst=$(echo ${dropt} | \
+				egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+			if [ ${ctst} -gt 0 ];then
+				chkdir=$(echo "${dropt}" | sed -e s/".*:"//g)
+				if [ -e "${chkdir}" ];then
+					eval $TMP[${indx}]=\"${dropt}\"
+					return
+				fi
+			fi
+		fi
+	fi
+	echo -e "\"${dropt}\" - Invalid entry for ${TMPnme} ${descr}"
+	if [ ! -z "${dropt}" ];then
+		echo -e "Directory \"${chkdir}\" Does not exist"
+	fi
+	echo "${TMPnme} ${descr} Not Changed"
+	sleep 2
+	return 1
+}
+
+#Returns Ramdisk size of initrd.img
+GetRDSize() { #Takes full tftp path as parameter
+	if [ $# -eq 1 ];then
+		rdfle="${1}/initrd.img"
+		if [ -e "${rdfle}" ];then
+			rds=$(echo $(( `zcat ${rdfle} | wc -c`/1024 )))
+			echo "${rds}"
+		else
+			return 1
+		fi
+	else
+		echo "GetRDSize: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+}
+
+#Change global variables in order to alter configuration
+#Returns 0 if success and 1 if failed
+OptChange() { #Takes 2 parameters type and entry index to edit
+	if [ $# -eq 2 ];then
+		SetVars "${1}"
+		[ $? -ne 0 ] &&	echo "OptChange: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		octipe=${1}
+	else
+		echo "OptChange: Incorrect parameters passed - Exiting" && Read nothing && Exit 1
+	fi
+	mxlim=$(( ${#CURRvars[@]}-1 ))
+	IsValidInt "${2}" ${mxlim}
+	if [ $? -ne 0 ] && [ "${2}" != "0" ];then
+		echo "OptChange: Invalid Index \"$2\" passed - Exiting" && Exit 1
+	fi
+	clear
+	declare -a narrs=()
+	declare -i max=0
+	declare -i sze=0
+	defalt=""
+	gcmmand=""
+	bcmmand=""
+	prefix=""
+	canzero=""
+	ntry=`echo -e ${CURRdesc[${2}]} | sed -e 's/\t//g'`
+	ncid=${CURRvars[${2}]}
+	echo -e "Enter value for ${CURRnme} ${ntry}:"
+	eval preval=$\{${CURR}[${2}]}
+	echo -e "\tCurrent ${CURRnme} ${ntry} = ${preval}"
+	case "${1}" in
+		"${SERVERlbl}")
+			case "${ncid}" in
+				"HNME" )
+					defalt="`GetHostname`"
+					if [ -n "${defalt}" ];then
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "\tUnable to determine the ${ntry} on this System"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+				"TFTP" )
+					CheckTFTPDir
+					if [ $? -eq 0 ];then
+						defalt="`GetTFTPDir`"
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "The ${ntry} on this system is not configured or is foreign"
+					echo -e "Please configure it correctly or manually enter your ${ntry}"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+					Read optch
+					if [ -d "${optch}" ];then
+						declare -i tsttf=`echo ${optch} | grep -c "/$"`
+						[ ${tsttf} -eq 0 ] && optch="${optch}/"
+						eval $CURR[${2}]=\"${optch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				"NFSROOT" )
+					defalt="`GetDisklessDir`"
+					if [ -d "${defalt}" ];then
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "The ${ntry} on this server is not standard"
+					echo -e "Please configure it correctly or manually enter your ${ntry} path"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+					Read optch
+					if [ -d "${optch}" ];then
+						declare -i tsttf=`echo ${optch} | grep -c "/$"`
+						[ ${tsttf} -eq 0 ] && optch="${optch}/"
+						eval $CURR[${2}]=\"${optch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				"ETH" )
+					defalt="`GetDETH`"
+					if [ -n "${defalt}" ];then
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "\tUnable to determine the ${ntry} on this System"
+					echo -e "Enter new value for ${CURRnme} ${ntry} (0 - 9):"
+					canzero=true
+					max=9
+					prefix=eth
+				;;
+				"CLIP" )
+					default="`GetDHCPIP`"
+					if [ -n "${defalt}" ];then
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "The ${ntry} on this server could not be determined"
+					echo -e "Please configure it correctly or manually enter the ${ntry}"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+					Read optch
+					IsValidIP "${optch}"
+					if [ $? -eq 0 ];then
+						eval $CURR[${2}]=\"${optch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				"SHIP" )
+					default="`GetShelfIP`"
+					if [ -n "${defalt}" ];then
+						eval $CURR[${2}]=${defalt}
+						echo -e "\t${ntry} on this system is \"${defalt}\""
+						echo -e "${CURRnme} ${ntry} will be set to ${defalt}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					fi
+					echo -e "The ${ntry} on this server could not be determined"
+					echo -e "Please configure it correctly or manually enter the ${ntry}"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+					Read optch
+					IsValidIP "${optch}"
+					if [ $? -eq 0 ];then
+						eval $CURR[${2}]=\"${optch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${IMAGElbl}")
+			case "${ncid}" in
+				"OSI" )
+					echo -e "Enter new value ${CURRnme} ${ntry} (${ntry} Should reflect image version):"
+				;;
+				"TFTP" )
+					SelectDir ${CURRlbl} TFTP
+					res=$?
+					if [ "${res}" == 0 ];then
+						indx=`GetIndex ${CURRlbl} RDSIZE`
+						OptChange ${1} ${indx}
+					fi
+					return ${res}
+				;;
+				"NFSROOT" )
+					SelectDir ${CURRlbl} NFSROOT
+					return $?
+				;;
+				"RDSIZE" )
+					srindx=`GetIndex SERVER TFTP`
+					crindx=`GetIndex ${CURRlbl} TFTP`
+					eval tfdir=$\{${CURR}[${crindx}]}
+					tfdir="${SERVER[${srindx}]}/${tfdir}"
+					rdsize=`GetRDSize "${tfdir}"`
+					res=$?
+					echo -e "\t${CURRnme} ${ntry} Should be derived from the initrd.img"
+					if [ "${res}" == 0 ] && [ -n "${rdsize}" ];then
+						echo -e "${CURRnme} ${ntry} from ${tfdir}/initrd.img is \"${rdsize}\""
+						eval $CURR[${2}]=${rdsize}
+						echo -e "${CURRnme} ${ntry} will be set to ${rdsize}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					else
+						defalt=26000
+						echo -e "\tCould not Calculate ${ntry} (you might be missing initrd.img)"
+						echo -e "\tSet ${CURRnme} ${ntry} manually 1 - 60000"
+						echo -e "\tHit Enter to accept default value ${defalt}"
+					fi
+					max=60000
+					echo -e "Enter new value for ${CURRnme} ${ntry} (1 - 60000):"				
+				;;
+				"OPTS" )
+					defalt='console=ttyS0,115200n8 reboot=c i8042.reset i8042.noaux'
+					echo -e "\tHit Enter to accept default value\n\t\t${defalt}"
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${SHELFlbl}")
+			case "${ncid}" in
+				"IP")
+					echo -e "\tCurrent ${CURRnme} Subnet = ${sheip}"
+					echo -e "Enter final range of the ${CURRnme} ${ntry} for Subnet ${sheip} :"
+					prefix=`echo -e ${sheip}`
+					max=255
+				;;
+				"SLTS")
+					echo -e "\tSmall ATCA Chassis = 6"
+					echo -e "\tLarge ATCA Chassis = 14"
+					echo -e "Enter ${ntry} of the ${CURRnme}:"
+					max=14
+				;;
+				"MAC" )
+					echo -e "Enter ${CURRnme} ${ntry} using \":\" as the delimter:"
+					Read optch
+					IsValidMac ${optch}
+					if [ $? -eq 0 ];then
+						capoptch=`echo ${optch} | tr \"[:lower:]\" \"[:upper:]\"`
+						eval $CURR[${2}]=\"${capoptch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${BLADElbl}")
+			case "${ncid}" in
+				"MAC" )
+					echo -e "Enter ${CURRnme} ${ntry} using \":\" as the delimter:"
+					Read optch
+					IsValidMac ${optch}
+					if [ $? -eq 0 ];then
+						capoptch=`echo ${optch} | tr \"[:lower:]\" \"[:upper:]\"`
+						eval $CURR[${2}]=\"${capoptch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				"SHM")
+					slindx=`GetIndex ${CURRlbl} BSLOT`
+					SetVars "${SHELFlbl}" TMP
+					#narrs=${TMPlbl}s
+					ShowIt ${TMPlbl}
+					echo -e "Select ${TMPnme} to use for ${CURRnme} ${ntry}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+					gcmmand="OptChange ${CURRlbl} ${slindx}"
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '$CURR[${slindx}]=
+				;;
+				"BSLOT")
+					slindx=`GetIndex ${SHELFlbl} SLTS`
+					shindx=`GetIndex ${CURRlbl} SHM`
+					SetVars "${SHELFlbl}" TMP
+					#narrs=${TMPlbl}
+					eval setshlfm=\${${CURR}[${shindx}]}
+					if [ -n "${setshlfm}" ];then
+						GetIt ${TMPlbl} ${setshlfm}
+						eval shlfmslts=\${${TMP}[${slindx}]}
+						echo -e "\tSelect Slot 1 - ${shlfmslts}"
+						echo -e "Select Slot in ${TMPnme} ${setshlfm}:"
+						max=${shlfmslts}
+						bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '$CURR[${shindx}]=
+					else
+						echo -e "\tPlease set the ${TMPnme} before setting the ${CURRnme} ${ntry}"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return 1
+					fi
+				;;
+				"TYP")
+					echo -e "For NPU to be configured correctly if the blade is an AT8050 the ${nnme} ${ntry} should be \"AT8050\""
+					echo -e "Enter new value for ${nnme} ${ntry}:"
+				;;
+				* )
+					echo -e "Enter new value for ${nnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${BLADE_CONFlbl}")
+			case "${ncid}" in
+				"BID")
+					SetVars "${BLADElbl}" TMP
+					#narrs=images
+					ShowIt ${TMPlbl}
+					echo -e "Select ${ntry} to use for ${CURRnme}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '"$CURR[${2}]=${preval}"
+				;;
+				"NHID")
+					SetVars "${IMAGElbl}" TMP
+					#narrs=images
+					ShowIt ${TMPlbl}
+					echo -e "Select ${ntry} to use for ${CURRnme}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '"$CURR[${2}]=${preval}"
+				;;
+				"NPCID")
+					SetVars "${NPU_CONFlbl}" TMP
+					#narrs=images
+					ShowIt ${TMPlbl}
+					echo -e "\tHit Enter to leave empty"
+					echo -e "Select ${ntry} to use for ${CURRnme}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+				;;
+				"IP")
+					hoindx=`GetIndex ${CURRlbl} HOST`
+					prefix=`echo -e ${cliip}`
+					max=253
+					echo -e "\tCurrent ${CURRnme} Subnet = ${cliip}"
+					echo -e "Enter final range of the ${CURRnme} ${ntry} for Subnet ${cliip}:"
+					gcmmand="OptChange ${CURRlbl} ${hoindx}"
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '$CURR[${hoindx}]=
+				;;
+				"HOST")
+					ipindx=`GetIndex ${CURRlbl} IP`
+					eval endip=\${${CURR}[${ipindx}]}
+					endip=`echo ${endip} | sed -e s/".*\."//`
+					optch=ceast${endip}
+					IsValidInt "${endip}" 253
+					if [ $? -eq 0 ];then
+						eval $CURR[${2}]=\"${optch}\"
+						echo -e "${CURRnme} ${ntry} will be set to ceast${endip}:"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry}"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						return 1
+					fi
+				;;
+				"ETH")
+					echo -e "\tDefault ${ntry} for CP6010 = 0"
+					echo -e "\tDefault ${ntry} for AT8020 = 3"
+					echo -e "\tDefault ${ntry} for AT8050 = 2"
+					echo -e "\tDefault ${ntry} can change for ATCA hardware depending where Ethernet AMC is installed"
+					echo -e "Enter ${ntry} of the ${CURRnme}:"
+					canzero=true
+					max=20
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${NPU_IMAGElbl}")
+			case "${ncid}" in
+				"NPOS" )
+					echo -e "Enter new value ${CURRnme} ${ntry} (${ntry} Should reflect image version):"
+				;;
+				"TFTP" )
+					prefix='tftpboot 31000000'
+					SelectDir ${CURRlbl} TFTP
+					res=$?
+					if [ "${res}" == "0" ];then
+						eval tdir=\"\${${CURR}[${2}]}\"
+						tdir="${prefix} ${tdir}"
+						eval $CURR[${2}]=\"${tdir}\"
+					fi
+					return ${res}
+				;;
+				"NFSROOT" )
+					SelectDir ${CURRlbl} NFSROOT
+					return $?
+				;;
+				"OPTS" )
+					defalt='bootoctlinux 31000000 coremask=3 root=/dev/nfs'
+					prefix='bootoctlinux 31000000 coremask=3 '
+					echo -e "\tHit Enter to accept default value\n\t\t${defalt}"
+					echo -e "Enter new value for ${CURRnme} ${ntry} after \"${prefix}\":"
+					echo -e "Enter \"standard\" to set ${CURRnme} ${ntry} to \"${prefix}\":"
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${NPUlbl}")
+			case "${ncid}" in
+				"MAC" )
+					echo -e "Enter ${CURRnme} ${ntry} using \":\" as the delimter:"
+					Read optch
+					IsValidMac ${optch}
+					if [ $? -eq 0 ];then
+						capoptch=`echo ${optch} | tr \"[:lower:]\" \"[:upper:]\"`
+						eval $CURR[${2}]=\"${capoptch}\"
+						return
+					else
+						echo -e "\"${optch}\" - Invalid entry for ${CURRnme} ${ntry} "
+						echo "${CURRnme} ${ntry} Not Changed" && sleep 1
+						return 1
+					fi
+				;;
+				* )
+					echo -e "Enter new value for ${nnme} ${ntry}:"
+				;;
+			esac
+		;;
+		"${NPU_CONFlbl}")
+			case "${ncid}" in
+				"NID")
+					SetVars "${NPUlbl}" TMP
+					ShowIt ${TMPlbl}
+					echo -e "Select ${ntry} to use for ${CURRnme}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '"$CURR[${2}]=${preval}"
+				;;
+				"NPUI")
+					SetVars "${NPU_IMAGElbl}" TMP
+					ShowIt ${TMPlbl}
+					echo -e "Select ${ntry} to use for ${CURRnme}:"
+					eval declare -i sze=$\{#${TMP}s[@]}
+					bcmmand='[ -z $(eval echo "\${$CURR[${2}]}") ] && '"$CURR[${2}]=${preval}"
+				;;
+				* )
+					echo -e "Enter new value for ${CURRnme} ${ntry}:"
+				;;
+			esac
+		;;
+	esac
+	[ ${sze} -gt 0 ] && max=${sze}
+	Read optch
+	if [ ${max} -gt 0 ];then
+		if [ -n "${canzero}" ] && [ "${optch}" == "0" ];then
+			declare -i res=0
+		else
+			IsValidInt "${optch}" ${max}
+			declare -i res=$?
+		fi
+		if [ ${res} -eq 0 ];then
+			if [ ${sze} -gt 0 ];then
+				optch=$(( ${optch}-1 ))
+				eval $CURR[${2}]=$(eval echo "\${${TMPs}[${optch}]}")
+				eval ${gcmmand}
+			else
+				[ -n "${prefix}" ] && optch=${prefix}${optch}
+				eval $CURR[${2}]=\"${optch}\"
+				eval ${gcmmand}
+			fi
+		elif [ ${res} -ne 0 ] && [ ${sze} -gt 0 ] && [ -z "${optch}" ];then
+				eval $CURR[${2}]=${optch}
+				eval ${bcmmand}
+		elif [ -n "${defalt}" ] && [ -z "${optch}" ];then
+				eval $CURR[${2}]=\"${defalt}\"
+				eval ${gcmmand}
+		else
+			echo "\"${optch}\" - Invalid Choice..."
+			echo "${CURRnme} ${ntry} Not Changed"
+			eval ${bcmmand}
+			sleep 1
+			return 1
+		fi
+	elif [ -n "${defalt}" ] && [ -z "${optch}" ];then
+		eval $CURR[${2}]=\"${defalt}\"
+		eval ${gcmmand}
+	else
+		if [ -n "${prefix}" ] && [ "${optch}" == "standard" ];then
+			optch=${prefix}
+		elif [ -n "${prefix}" ];then
+			optch=${prefix}${optch}
+		fi
+		eval $CURR[${2}]=\"${optch}\"
+		eval ${gcmmand}
+	fi
+	if [ "${2}" == "0" ];then
+		eval aide=\"\${${CURR}[0]}\"
+		aide=$(echo ${aide} | sed -e s/[" "\\t]//)
+		eval $CURR[0]=\"${aide}\"
+		if [ -z "${aide}" ];then
+			echo -e "\n${CURRnme} ${ntry} is a required parameter"
+			echo -e "Please enter a valid value:" && sleep 2
+			OptChange ${1} ${2}
+		else
+			DoesExist ${CURRid} "${CURRnme}" ${aide}
+			declare -i res=$?
+			if [ "${res}" == "1" ];then #Good Unique ID
+				eval $CURR[0]=\"${aide}\"
+			elif [ "${res}" == "0" ];then
+				echo "${CURRnme} ID \"${aide}\" already exists"
+				echo -e "\tPlease choose another ${CURRnme} ID" 
+				aide=""
+				eval $CURR[0]=\"${aide}\"
+				echo "Press Enter to continue"
+				Read nothing
+				OptChange ${1} ${2}
+			else
+				echo "OptChange: Problem when attempting to set ID"
+				echo -e "\tCheck for multiple ${CURRnme} \"${aide}\"entries in ${fle}" && Exit 1
+			fi
+		fi
+	fi
+}
+
+#Sets Global array searchar with ID of matches
+SearchData() { #Takes two to three parameters type and Search phrase, optional search ID
+	if [ $# -eq 2 ] || [ $# -eq 3 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] &&	echo "SearchData: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		if [ $# -eq 3 ];then
+			indx=`GetIndex "${TMPlbl}" "${3}"`
+			[ -z "${indx}" ] &&	echo "SearchData: Incorrect Search ID passed \"${3}\" - Exiting" && Exit 1
+			srid=$(( ${indx}+1 ))
+			srid='$'${srid}
+		else
+			srid='$0'
+		fi
+	else
+		echo "SearchData: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	srch=`echo "${2}" | sed -e 's/\//[\/]/g'`
+	unset searchar
+	searchar=($(awk "BEGIN { RS = \"#####\n\" ; FS = \"\n\" ;} \
+		{ if ( \$0 ~ /^${TMPid}=.*$/ ) { if ( ${srid} ~ /${srch}/ ) \
+		{ print \$0 } } }" ${fle} | grep "^${TMPid}=" | sed -e s/"^${TMPid}="//))
+	if [ ${#searchar[@]} -eq 0 ];then
+		return 1
+	fi
+	return
+}
+
+#Get info from blade configuration file
+GetData() { #Takes two parameters type and ID optional
+	if [ $# -eq 1 ] || [ $# -eq 2 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] &&	echo "GetData: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		[ $# -eq 2 ] &&	ide=${2} || ide=".*"
+	else
+		echo "GetData: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	DoesExist ${TMPid} "${TMPnme}" ${2}
+	[ $? -ne 0 ] &&	echo -e "${messge} - Exiting" && Exit 1
+	if [ $# -eq 2 ];then
+		eval unset $TMP
+		declare -i z=0
+		for var in ${TMPvars[@]};do
+			tmp=$(awk "BEGIN { RS = \"#####\n\" ; FS = \"\n\" ;} \
+				{ if (\$1 ~ /^${TMPid}=${ide}$/) { print \$0 } }" ${fle} \
+				| grep "^${var}" | sed -e s/"^${var}="//)
+			if [ -z "${tmp}" ] && [ ${z} -lt ${TMPlim} ];then
+				echo "Empty entry for \"${var}\" in \"${ide}\" - Exiting"
+				Exit 1
+			fi
+			eval $TMP[${z}]=\"${tmp}\"
+			z=${z}+1
+		done
+	else
+		eval unset $TMPs
+#		declare -a tmp=(`grep "^${lbl}=.*$" ${fle} | sed -e s/"^${lbl}="//g`)
+		declare -a tmp=(`awk "BEGIN { RS = \"#####\n\" ; FS = \"\n\" ;} \
+				{ if (\\$1 ~ /^$TMPid=.*$/) { print \\$1 } }" ${fle} \
+				| grep "^${TMPid}" | sed -e s/"^${TMPid}="//`)
+		declare -i z=0
+		while [ ${z} -lt ${#tmp[@]} ];do
+			eval $TMPs[${z}]=\"${tmp[${z}]}\"
+			z=${z}+1
+		done
+	fi
+}
+
+#Set info in blade configuration file
+SetData() { #Takes two parameters TYPE and what to do (SAVE SAVEAS DELETE)
+	if [ $# -eq 2 ];then
+		SetVars "${1}"
+		[ $? -ne 0 ] && echo "SetData: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "SetData: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	eval chkval=$\{${CURR}[0]}
+	DoesExist ${CURRid} "${CURRnme}" "${chkval}"
+	declare -i res=$?
+	declare -i x=0
+	case "${2}" in
+		"SAVE" )
+			case "${res}" in
+				"0" ) #One entry found
+					while  [ ${x} -lt ${CURRlim} ];do
+						eval tmp=$\{${CURR}[${x}]}
+						if [ -z "${tmp}" ];then
+							vntry=`echo -e ${CURRdesc[${x}]} | sed -e s/"\t"//g`
+							echo -e "\tEntry for ${CURRnme} ${vntry} cannot be empty"
+							return 1				
+						fi
+						x=$x+1
+					done
+					if [ -e ${fle}.tmp ];then
+						echo -e "Something is currently being saved, try again or remove ${fle}.tmp"
+						return 1				
+					else
+						touch ${fle}.tmp
+						elns=`sed -n "/^${CURRid}=${chkval}$/,/^#####$/ =" ${fle}`
+						feln=`echo ${elns} | sed -e s/" ".*//`
+						leln=`echo ${elns} | sed -e s/.*" "//`
+						totlns=`sed -n '$=' ${fle}`
+						end=$(( ${totlns}-${leln}+1 ))
+						head -n ${feln} ${fle} >> ${fle}.tmp
+						declare -i z=1
+						while [ $z -lt ${#CURRvars[@]} ];do
+							eval entval=$\{${CURR}[${z}]}
+							if [ -n "${entval}" ];then
+								echo "${CURRvars[${z}]}=${entval}" >> ${fle}.tmp
+							fi
+							z=$z+1
+						done
+						tail -n ${end} ${fle} >> ${fle}.tmp
+						\mv ${fle}.tmp ${fle}
+						echo -e "Configration for ${CURRnme} \"${chkval}\" Saved" & sleep 1
+						if [ "${CURRlbl}" == "${SERVERlbl}" ];then
+							SetGlobalVars
+						fi
+						return 0
+					fi
+				;;
+				"1" ) #No Entries found
+					echo -e "${CURRnme} Entry \"${chkval}\" no longer exists to be saved, Try Saving As"
+					return 1				
+				;;
+				"2" ) #Multiple Entries found
+					echo "SetData: You should never get here!"
+					echo -e "\tYou need to delete mulitple entries for \"${chkval}\" in ${fle}"
+					Exit 1
+				;;
+				* )
+					echo "SetData: You should never get here!"
+					echo -e "\tWhat have you done?"
+					Exit 1
+				;;
+			esac
+		;;
+		"SAVEAS" )
+			if [ "${CURRlbl}" == "${SERVERlbl}" ];then
+				DoesExist SID Server ".*"
+				declare -i res=$?
+				if [ ${res} -ne 1 ];then
+					echo -e "Multiple ${CURRnme} Configurations are not supported"
+					return 1
+				fi
+			fi
+			case "${res}" in
+				"0" ) #Entry Already exists
+					echo -e "Entry for ${CURRnme} \"${chkval}\" already exists"
+					return 1				
+				;;
+				"1" ) #Validate parameters and save as
+					while  [ ${x} -lt ${CURRlim} ];do
+						eval tmp=$\{${CURR}[${x}]}
+						if [ -z "${tmp}" ];then
+							vntry=`echo -e ${CURRdesc[${x}]} | sed -e s/"\t"//g`
+							echo -e "\tEntry for ${CURRnme} ${vntry} cannot be empty"
+							return 1				
+						fi
+						x=$x+1
+					done
+					if [ -e ${fle}.tmp ];then
+						echo -e "Something is currently being saved, try again or remove ${fle}.tmp"
+						return 1				
+					else
+						touch ${fle}.tmp
+						oln=`sed -n "/^#END ${CURRlbl} ENTRIES#$/ =" ${fle}`
+						totlns=`sed -n '$=' ${fle}`
+						strt=$(( ${oln}-1 ))
+						end=$(( ${totlns}-${oln}+1 ))
+						head -n ${strt} ${fle} >> ${fle}.tmp
+						chkstrt=`sed -n "${strt} p" ${fle}`
+						if [ "${chkstrt}" != "#####" ];then
+							echo "#####" >> ${fle}.tmp
+						fi
+						declare -i z=0
+						while [ $z -lt ${#CURRvars[@]} ];do
+							eval entval=$\{${CURR}[${z}]}
+							if [ -n "${entval}" ];then
+								echo "${CURRvars[${z}]}=${entval}" >> ${fle}.tmp
+							fi
+							z=$z+1
+						done
+						echo "#####" >> ${fle}.tmp
+						tail -n ${end} ${fle} >> ${fle}.tmp
+						\mv ${fle}.tmp ${fle}
+						echo -e "New Configration for ${CURRnme} Saved As \"${chkval}\"" & sleep 1
+						if [ "${CURRlbl}" == "${SERVERlbl}" ];then
+							SetGlobalVars
+						fi
+						return 0
+					fi
+				;;
+				"2" ) #Multiple entries found
+					echo "SetData: You should never get here!"
+					echo -e "\tYou need to delete mulitple entries for ${CURRnme} \"${chkval}\" in ${fle}"
+					Exit 1
+				;;
+				* )
+					echo "SetData: You should never get here!"
+					echo -e "\tWhat have you done?"
+					Exit 1
+				;;
+			esac
+		;;
+		"DELETE" )
+			if [ "${CURRlbl}" == "${SERVERlbl}" ];then
+				DoesExist SID Server ".*"
+				declare -i res=$?
+				if [ ${res} -ne 3 ];then
+					echo -e "Only ${CURRnme} Configuration cannot be deleted"
+					return 1
+				fi
+			fi
+			case "${res}" in
+				"0" ) #Delete it
+					if [ -e ${fle}.tmp ];then
+						echo -e "Something is currently being saved, try again or remove ${fle}.tmp"
+						return 1				
+					else
+						touch ${fle}.tmp
+						elns=`sed -n "/^${CURRid}=${chkval}$/,/^#####$/ =" ${fle}`
+						feln=`echo ${elns} | sed -e s/" ".*//`
+						leln=`echo ${elns} | sed -e s/.*" "//`
+						totlns=`sed -n '$=' ${fle}`
+						strt=$(( ${feln}-1 ))
+						end=$(( ${totlns}-${leln} ))
+						head -n ${strt} ${fle} >> ${fle}.tmp
+						tail -n ${end} ${fle} >> ${fle}.tmp
+						\mv ${fle}.tmp ${fle}
+						echo -e "Configration for ${CURRnme} \"${chkval}\" Deleted" & sleep 1
+						#Add Smarts to delete dependencies HERE Otherwise many ghost entries will exist
+						return
+					fi
+				;;
+				"1" ) #No entries found
+					echo -e "Entry ${CURRnme} \"${chkval}\" no longer exists to be deleted"
+					return 1				
+				;;
+				"2" ) #Multiple entries found
+					echo "SetData: You should never get here!"
+					echo -e "\tYou need to delete mulitple entries for ${CURRnme} \"${chkval}\" in ${fle}"
+					Exit 1
+				;;
+				* )
+					echo "SetData: You should never get here!"
+					echo -e "\tWhat have you done?"
+					Exit 1
+				;;
+			esac
+		;;
+		* )
+			echo "SetData: Invalid second parameter \"$2\" passed - Exiting"
+			Exit 1
+		;;
+	esac
+}
+
+#Edits existing configuration entries
+EditData() { #Takes 2 - 3 parameters type and ID optional NEW as third for new item to be saved
+	if [ $# -ge 2 ];then
+		SetVars "${1}"
+		[ $? -ne 0 ] && echo "EditData: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		eide=${2}
+	else
+		echo "EditData: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	while true;do
+		clear
+		echo -e "Editing ${CURRnme} \"${eide}\":"
+		declare -i z=0
+		while [ ${z} -lt $(( ${#CURRvars[@]}-1 )) ];do
+			z=${z}+1
+			echo -e "\t${z} ---\t${CURRnme}\t${CURRdesc[${z}]} = $(eval echo "\${${CURR}[${z}]}")"
+		done
+		echo -e "\t\tA - Save and Write Changes to ${CURRnme} \"${eide}\""
+		echo -e "\t\tB - Save As (Saves Changes as a New ${CURRnme})"
+		echo -e "\t\tC - Delete Entry and Configuration for ${CURRnme} \"${eide}\""
+		echo -e "\t\tEnter - Cancel Changes - Back to ${CURRnme} List"
+		echo "Enter Entry Number to Edit:"
+		Read eiopt CAP
+		IsValidInt "${eiopt}" ${z}
+		if [ $? == 0 ];then
+			OptChange ${1} ${eiopt}
+		else
+			case ${eiopt} in
+				"A") #Save and write changes
+					if [ "${3}" == "NEW" ];then
+						SetData ${1} SAVEAS
+						res=$?
+					else
+						SetData ${1} SAVE
+						res=$?
+					fi
+					if [ "${res}" == "0" ];then
+						break
+					else
+						echo -e "Hit Enter To Continue:" && Read nothing
+					fi;;
+				"B") #Save as new
+					OptChange ${1} 0
+					idee=$(eval echo "\${${CURR}[0]}" | sed -e s/" "//)
+					eval $CURR[0]=${idee}
+					DoesExist ${CURRid} "${1}" "${idee}"
+					declare -i res=$?
+					if [ "${res}" == "1" ];then
+						SetData ${1} SAVEAS
+						if [ $? -eq 0 ];then
+							break
+						else
+							eide=${2}
+							eval $CURR[0]=${eide}
+							echo -e "Hit Enter To Continue:" && Read nothing
+						fi
+					elif [ "${res}" == "0" ];then
+						echo "${CURRnme} ID \"${idee}\" already exists"
+						echo -e "\tPlease choose another ${CURRnme} ID" 
+						eide=${2}
+						eval $CURR[0]=${eide}
+						echo "Press Enter to continue"
+						Read nothing
+					else
+						echo "EditData: Problem when attempting to SaveAs"
+						echo -e "\tCheck for multiple ${CURRnme} \"${idee}\" entries in ${fle}"
+						Exit 1
+					fi;;
+				"C") #Delete Entry
+					if [ "${3}" == "NEW" ];then
+						echo -e "Entry ${CURRnme} \"${idee}\" Has not been created yet"
+						echo -e "Hit Enter To Continue:"
+						Read nothing
+						res=1
+					else
+						SetData ${1} DELETE
+						res=$?
+					fi
+					if [ "${res}" == "0" ];then
+						break
+					else
+						echo -e "Hit Enter To Continue:" && Read nothing
+					fi;;
+				"") #Back to List
+					break;;
+				*)
+					echo "Invalid Choice..." && sleep 1;;
+			esac
+		fi
+	done
+}
+
+#Add new info into blade configuration file
+AddData() { #Takes one parameter - Type
+	if [ $# -eq 1 ];then
+		SetVars "${1}"
+		[ $? -ne 0 ] && echo "AddData: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "AddData: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	clear
+	echo -e "Creating new ${CURRnme} Entry:"
+	echo -e "Please provide the following ${CURRnme} data"
+	echo -e "Enter \"STOP\" to quit adding new ${CURRnme}" && sleep 2
+	eval unset $CURR
+	declare -i z=0
+	while [ $z -lt ${#CURRvars[@]} ];do
+		antry=`echo -e ${CURRdesc[${z}]} | sed -e 's/\t//g'`
+		eval tstval=$\{${CURR}[${z}]}
+		if [ -z "${tstval}" ];then
+			OptChange ${1} ${z}
+			eval tstval=\"$\{${CURR}[${z}]}\"
+		fi
+		if [ -z "${tstval}" ] && [ ${z} -lt ${CURRlim} ];then
+			echo -e "\n${CURRnme} ${antry} is a required parameter"
+			echo -e "Please enter a valid value:"
+			sleep 1
+		elif [ "${tstval}" == "STOP" ];then
+			eval unset $CURR
+			return
+		else
+			echo -e "\n${CURRnme} ${antry} set to - \"${tstval}\""
+			sleep 1
+			z=${z}+1
+		fi
+	done
+	eval tempide=$\{${CURR}[0]}
+	EditData ${1} ${tempide} NEW
+}
+
+#Get Data options from blades.config
+GetIt() { #Takes Type and Type ID if getting specific data
+	if [ $# -eq 1 ] || [ $# -eq 2 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] && echo "GetIt: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "GetIt: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	DoesExist ${TMPid} "${TMPnme}" ${2}
+	declare -i res=$?
+	if [ $# -gt 1 ];then
+		[ ${res} -ne 0 ] && echo -e "${messge} - Exiting" && Exit 1
+		GetData "${1}" "${2}"
+	else
+		if [ ${res} -eq 3 ];then
+			echo -e "${messge}"
+			declare -i z=0
+			eval unset $TMPs
+		else
+			GetData "${1}"
+		fi
+	fi
+	declare -i z=0
+}
+
+#Runs ConfigureBlade With Selected BLADE Configuration
+SetConfigureBlade() { #Takes optional parameter REBOOT to toggle auto reboot option
+	clear
+	echo -e "Select a ${BLADE_CONFnme} to Activate:"
+	if [ "${1}" == "REBOOT" ];then
+		echo -e "\t${BLADEnme} will be RESET after Configuration"
+		boption="\t\tB - Turn Auto Reboot after Configuration Flag OFF"
+	else
+		echo -e "\t${BLADEnme} will PROMPT for Reset after Configuration"
+		boption="\t\tB - Turn Auto Reboot after Configuration Flag ON"
+	fi
+	ShowIt ${BLADE_CONFlbl}
+	declare -i max=${#BLADE_CONFs[@]}
+	echo -e "\t\tA - Back to ${BLADE_CONFnme} Menu"
+	echo -e "${boption}"
+	echo "Enter Choice:"
+	Read scbpick CAP
+	IsValidInt "${scbpick}" ${max}
+	if [ $? == 0 ];then
+		ConfigureBlade "${BLADE_CONFs[$(( ${scbpick}-1 ))]}" "${1}"
+		SetConfigureBlade
+	elif [ "${scbpick}" == "A" ];then
+		return
+	elif [ "${scbpick}" == "B" ];then
+		if [ "${1}" == "REBOOT" ];then
+			SetConfigureBlade
+			return
+		else
+			SetConfigureBlade REBOOT
+			return
+		fi
+	else
+		echo "Invalid Choice..." && sleep 1
+		SetConfigureBlade
+		return
+	fi
+}
+
+#Creates image-Clients.tgz in default nfs dir
+ExportClients() {
+	clear
+	echo "Select an ${IMAGEnme} to Archive all ${CLIENTnme}s:"
+	if [ -d "${defaultdisk}" ];then 
+		declare -a ecarr=(`ls -1 ${defaultdisk}`)
+		declare -a ecimarr=()
+		if [ ${#ecarr[@]} -gt 0 ];then
+			declare -i x=0
+			declare -i y=0
+			while [ ${x} -lt ${#ecarr[@]} ];do
+				[ -d ${defaultdisk}${ecarr[${x}]}/*/snapshot ] && \
+					ecimarr[${y}]="${ecarr[${x}]}" && y=${y}+1
+				x=${x}+1
+			done
+		fi
+	fi
+	declare -i s=1
+	for ecar in "${ecimarr[@]}";do
+		declare -a sncnt=(`ls -1 ${defaultdisk}${ecar}/*/snapshot/ | egrep "ceast[0-9]++" | wc -l`)
+		echo -e "\t${s} -\t${CLIENTnme} ${IMAGEnme} \"${ecar}\" -\t${sncnt} ${CLIENTnme}s"
+		s=${s}+1
+	done
+	s=${s}-1
+	echo -e "\tA - Back to ${CLIENTnme} Menu"
+	echo "Enter Choice:"
+	Read ecpick CAP
+	IsValidInt "${ecpick}" ${s}
+	if [ $? == 0 ];then
+		clear
+		ec_img="${ecimarr[$(( ${ecpick}-1 ))]}"
+		snapdir=`eval echo "${defaultdisk}${ec_img}/*/snapshot"`
+		declare -a snaps=(`ls ${snapdir}/ | egrep "ceast[0-9]++"`)
+		cliarch="${ec_img}-Clients.tgz"
+		if [ ${#snaps[@]} -gt 0 ];then
+			if [ ! -e "${defaultdisk}${cliarch}" ];then
+				echo -e "The Following ${CLIENTnme}s will be Archived into ${cliarch}:"
+				for snp in "${snaps[@]}";do
+					echo -e "\t\t${CLIENTnme} Snapshot \"${snp}\""
+				done
+				echo -e "\tYes - Create ${cliarch} Archive:"
+				echo -e "\tEnter - Back to Export Clients Menu"
+				echo -e "Enter Choice:"
+				Read ecexp CAP
+				if [ "${ecexp}" == "YES" ];then
+					PrintDots "\nCreating ${cliarch} this will take time " &
+					jb=$!
+					pushd ${defaultdisk} > /dev/null
+					arcdir=`eval echo "${ec_img}/*/snapshot"`
+					tar -czf ${cliarch} `ls ${arcdir} | \
+						egrep "ceast[0-9]++" | \
+						xargs -i echo "${arcdir}/{}"` 2&> /dev/null
+					KillIt ${jb}
+					printf "DONE\n"
+					popd > /dev/null
+					if [ -e "${defaultdisk}${cliarch}" ];then
+						echo -e "\n${cliarch} Created in ${defaultdisk}"
+					else
+						echo -e "\n${cliarch} Not Created - Error"
+					fi
+					echo -e "Hit Enter to Continue:" && Read nothing
+					ExportClients
+				elif [ -z "${ecexp}" ];then
+					ExportClients
+				else
+					echo "Invalid Choice..." && sleep 1
+					ExportClients
+				fi
+			else
+				echo -e "${CLIENTnme} Archive ${cliarch} Already Exists"
+				echo -e "Move or Remove ${cliarch} to Create a new ${CLIENTnme} Archive - Nothing Done"
+				echo "Hit Enter to Continue" && Read nothing
+				ExportClients
+			fi
+		else
+			echo "No ${CLIENTnme}s to Archive - Nothing Done"
+			echo "Hit Enter to Continue" && Read nothing
+			ExportClients
+		fi
+	elif [ "${ecpick}" == "A" ];then
+		return
+	else
+		echo "Invalid Choice..." && sleep 1
+		ExportClients
+	fi
+}
+
+#Imports image-Clients.tgz in default nfs dir
+ImportClients() {
+	clear
+	echo -e "Search path for ${CLIENTnme} Archives is '${defaultdisk}'"
+	pth=${defaultdisk}
+	declare -a cliarchs=($(find ${pth} -name "*-Clients.tgz" -type f -maxdepth 1 -prune | \
+		sed -e s/"$(echo ${pth} | sed -e s/"\/"/"\\\\\/"/g)"//g | uniq))
+	clisze=${#cliarchs[@]}
+	declare -i cnter=1
+	declare -i upint=0
+	if [ ${clisze} -gt 0 ];then
+		echo -e "\t${CLIENTnme} Archives Found:"
+		while [ ${upint} -lt ${clisze} ];do
+			echo -e "\t\t${cnter} -\t${cliarchs[${upint}]}"
+			cnter=${cnter}+1
+			upint=${upint}+1
+		done
+	else
+		echo -e "\tNo ${CLIENTnme} Archives Found"
+	fi
+	echo -e "\tEnter - Back to ${CLIENTnme} Menu"
+	echo -e "Enter Choice:"
+	Read icins
+	IsValidInt "${icins}" $(( ${cnter}-1 ))
+	if [ $? == 0 ];then
+		icins=$(( ${icins}-1 ))
+		arch="${cliarchs[${icins}]}"
+		archd=`echo ${arch} | sed -e s/"-Clients\.tgz"//`
+		if [ -e "${defaultdisk}${archd}" ];then
+			echo -e "\nInstall ${CLIENTnme} Archive \"${arch}\"?"
+			echo -e "Enter Yes or No:"
+			Read runit CAP
+			if [ "${runit}" == "YES" ];then
+				clear
+				echo -e "Installing ${CLIENTnme} Archive ${arch} - DO NOT KILL THE SCRIPT"
+				if [ -d "${defaultdisk}" ] && [ -e "${defaultdisk}${arch}" ];then
+					pushd ${defaultdisk} > /dev/null
+					tar -xzf ${arch}
+					popd > /dev/null
+					echo -e "\n${CLIENTnme} Archive ${arch} Installed"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					ImportClients
+				else
+					echo -e "\nDirectory '${archdir}' or Archive '${arch}' missing" && sleep 2
+					ImportClients
+				fi
+			else
+				ImportClients
+			fi
+		else
+			echo -e "\n${IMAGElbl} ${archd} does not Exist to restore Archive - Nothing Done"
+			echo -e "Hit Enter to Continue:" && Read nothing
+			ImportClients
+		fi
+	elif [ -z "${icins}" ];then
+		return 0
+	else
+		echo "Invalid Choice..." && sleep 1
+		ImportClients
+	fi
+}
+
+#Shows Clients to save, edit or delete
+CheckClients() { #Takes Optional parameter snapshot path to view
+	clear
+	if [ $# -eq 0 ];then
+		echo "Select an ${IMAGEnme} to view ${CLIENTnme}s:"
+		if [ -d "${defaultdisk}" ];then 
+			declare -a ccarr=(`ls -1 ${defaultdisk}`)
+			declare -a ccimarr=()
+			if [ ${#ccarr[@]} -gt 0 ];then
+				declare -i x=0
+				declare -i y=0
+				while [ ${x} -lt ${#ccarr[@]} ];do
+					[ -d ${defaultdisk}${ccarr[${x}]}/*/snapshot ] && \
+						ccimarr[${y}]="${ccarr[${x}]}" && y=${y}+1
+					x=${x}+1
+				done
+			fi
+		fi
+		declare -i s=1
+		for ccar in "${ccimarr[@]}";do
+			declare -a sncnt=`ls -1 ${defaultdisk}${ccar}/*/snapshot/ | egrep "ceast[0-9]++" | wc -l`
+			echo -e "\t${s} -\t${CLIENTnme} ${IMAGEnme} \"${ccar}\" -\t${sncnt} ${CLIENTnme}s"
+			s=${s}+1
+		done
+		s=${s}-1
+		echo -e "\tA - Back to ${CLIENTnme} Menu"
+		echo "Enter Choice:"
+		Read ccpick CAP
+		IsValidInt "${ccpick}" ${s}
+		if [ $? == 0 ];then
+			CheckClients "${ccimarr[$(( ${ccpick}-1 ))]}"
+		elif [ "${ccpick}" == "A" ];then
+			return
+		else
+			echo "Invalid Choice..." && sleep 1
+			CheckClients
+		fi
+	else
+		echo "Select a ${1} ${CLIENTnme}:"
+		if [ -d "${defaultdisk}" ];then 
+			declare -a ccarr=(`ls -1 ${defaultdisk}${1}/*/snapshot/ | egrep "ceast[0-9]++"`)
+			declare -i s=1
+			if [ ${#ccarr[@]} -gt 0 ];then
+				for ccar in "${ccarr[@]}";do
+					echo -e "\t${s} -\t${1} ${CLIENTnme} \"${ccar}\""
+					s=${s}+1
+				done
+			else
+				echo -e "\tNo ${CLIENTnme}s Found"
+			fi
+		fi
+		s=${s}-1
+		echo -e "\t\tA - Back to ${CLIENTnme} Menu"
+		echo -e "\t\tB - Back to Check Diskless ${CLIENTnme}s Menu"
+		echo "Enter Choice:"
+		Read ccpick CAP
+		IsValidInt "${ccpick}" ${s}
+		if [ $? == 0 ];then
+			ccsnap="${ccarr[$(( ${ccpick}-1 ))]}"
+			clear
+			echo "Select option for ${1} ${CLIENTnme} ${ccsnap}:"
+			echo -e "\t1 - Save ${1} ${CLIENTnme} as Profile"
+			echo -e "\t2 - Copy ${1} ${CLIENTnme} ${ccsnap} to another ${CLIENTnme} name"
+			echo -e "\t3 - Delete ${1} ${CLIENTnme} ${ccsnap}"
+			echo -e "\t\tA - Back to ${CLIENTnme} Menu"
+			echo -e "\t\tB - Back to Check Diskless ${CLIENTnme}s Menu"
+			echo "Enter Choice:"
+			Read ccpck CAP
+			IsValidInt "${ccpck}" 3
+			if [ $? -eq 0 ];then
+				snapdir=`eval echo "${defaultdisk}${1}/*/snapshot"`
+				case ${ccpck} in
+					"1")
+						echo -e "Save Profile Not Supported Yet" && sleep 2
+						CheckClients ${1}
+					;;
+					"2")
+						rmsnap="${snapdir}/${ccsnap}"
+						echo -e "\nEnter Directory name to rename ${rmsnap} ${CLIENTnme}"
+						echo -e "To Change the ceast[x] just enter the number 1 - 100"
+						echo -e "Hit Enter to go Back to Check Diskless ${CLIENTnme}s Menu"
+						Read tstdel
+						IsValidInt "${tstdel}" 100
+						if [ $? -eq 0 ];then
+							rmsnp="${snapdir}/ceast${tstdel}"
+							if [ ! -d "${rmsnp}" ];then
+								echo -e "\nCopying ${rmsnap} to ${rmsnp}"
+								\cp -af ${rmsnap} ${rmsnp}
+							else
+								echo -e "\n${CLIENTnme} ${rmsnp} already exists - Nothing Done"
+								echo -e "Hit Enter to Continue:" && Read nothing
+							fi
+						elif [ -n "${tstdel}" ];then
+							tstdel=`echo "${tstdel}" | sed -e "s/ //g"`
+							rmsnp="${snapdir}/${tstdel}"
+							echo -e "\nRenaming ${rmsnap} to ${rmsnp}"
+							\mv -f ${rmsnap} ${rmsnp}
+						fi
+						CheckClients ${1}
+					;;
+					"3")
+						rmsnap="${snapdir}/${ccsnap}"
+						echo -e "Enter \"Yes\" to remove ${rmsnap}"
+						Read tstdel CAP
+						if [ "${tstdel}" == "YES" ];then
+							echo -e "\nRemoving ${rmsnap}"
+							\rm -rf ${rmsnap}
+						fi
+						CheckClients ${1}
+					;;
+				esac
+			elif [ "${ccpck}" == "A" ];then
+				return
+			elif [ "${ccpck}" == "B" ];then
+				CheckClients
+			else
+				echo "Invalid Choice..." && sleep 1
+				CheckClients ${1}
+			fi
+		elif [ "${ccpick}" == "A" ];then
+			return
+		elif [ "${ccpick}" == "B" ];then
+			CheckClients
+		else
+			echo "Invalid Choice..." && sleep 1
+			CheckClients ${1}
+		fi
+	fi
+}
+
+#Sets exports file
+SetExports() { #Takes Type and Image NFS path optional third parameter image name
+	if [ $# -lt 2 ] || [ $# -gt 3 ];then
+		echo "SetExports: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	[ -n "${3}" ] && imid="(${3})" || imid=""
+	if [ -d "${2}" ];then
+		nfdr=`echo "${2}" | sed s/"\/$"//`
+		case ${1} in
+			"${IMAGElbl}" )
+				srchex="[[:space:]]*${nfdr}/root[[:space:]]\|[[:space:]]*${nfdr}/snapshot[[:space:]]"
+				declare -i cmpcnt=2
+				nme=${IMAGEnme}
+			;;
+			"${NPU_IMAGElbl}" )
+				srchex="[[:space:]]*${nfdr}[[:space:]]"
+				declare -i cmpcnt=1
+				nme=${NPU_IMAGEnme}
+			;;
+			* )
+				echo -e "SetExports: Bad Type \"${1}\" Passed - Exiting" && Exit 1
+			;;
+		esac
+	else
+		echo -e "SetExports: Path \"${2}\" does not exist - Exiting" && Exit 1
+	fi
+	declare -i excnt=`grep -v '^[[:space:]]*#' ${defex} | grep -c "${srchex}"`
+	if [ ${excnt} -lt ${cmpcnt} ];then
+		echo -e "Adding ${nme} exports entry for ${2} to ${defex}"
+		cliindx=`GetIndex SERVER CLIP`
+		sclip="${SERVER[${cliindx}]}"
+		case ${1} in
+			"${IMAGElbl}" )
+				echo -e "\n#Setup for Diskless Environment using system-config-netboot ${imid}" >> ${defex}
+				echo -e "${nfdr}/root\t${sclip}/255.255.255.0(ro,no_root_squash,async)" >> ${defex}
+				echo -e "${nfdr}/snapshot\t${sclip}/255.255.255.0(rw,no_root_squash,async)" >> ${defex}
+			;;
+			"${NPU_IMAGElbl}" )
+				echo -e "\n#Setup for NPU Environment ${imid}" >> ${defex}
+				echo -e "${nfdr}\t${sclip}/255.255.0.0(rw,async,no_root_squash)" >> ${defex}
+			;;
+			* )
+				echo -e "SetExports: Bad Type \"${1}\" Passed - Exiting" && Exit 1
+			;;
+		esac
+		service nfs reload
+	else
+		echo -e "Entry for ${nme} export entry for ${2} to ${defex} - Already Exists"
+	fi
+}
+
+#Run Image Upgrade or Image Install Scripts
+ImageUpgradeInstall() { #Takes Type as only parameter
+	if [ $# -eq 1 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] && echo "ImageUpgradeInstall: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "ImageUpgradeInstall: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	clear
+	echo -e "Search path for ${TMPnme} Archives is '${defaultdisk}'"
+	pth=${defaultdisk}
+	declare -i upsze=0
+	if [ "${TMPlbl}" == "${IMAGElbl}" ];then
+		declare -a upgrades=($(find ${pth} -name "*-Upgrade.tgz" -type f -maxdepth 2 -prune | \
+			sed -e s/"$(echo ${pth} | sed -e s/"\/"/"\\\\\/"/g)"//g | uniq))
+		declare -a newimages=($(find ${pth} -name "*-Image.tgz" -type f -maxdepth 2 -prune | \
+			sed -e s/"$(echo ${pth} | sed -e s/"\/"/"\\\\\/"/g)"//g | uniq))
+		upsze=${#upgrades[@]}
+	elif [ "${TMPlbl}" == "${NPU_IMAGElbl}" ];then
+		declare -a newimages=($(find ${pth} -name "*-Octeon.tgz" -type f -maxdepth 2 -prune | \
+			sed -e s/"$(echo ${pth} | sed -e s/"\/"/"\\\\\/"/g)"//g | uniq))
+	else
+		echo "ImageUpgradeInstall: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	fi
+	declare -i nwsze=${#newimages[@]}
+	declare -i cnter=1
+	declare -i upint=0
+	if [ ${upsze} -gt 0 ];then
+		echo -e "\t${TMPnme} Upgrade Archives Found:"
+		while [ ${upint} -lt ${upsze} ];do
+			echo -e "\t\t${cnter} -\t${upgrades[${upint}]}"
+			cnter=${cnter}+1
+			upint=${upint}+1
+		done
+	else
+		[ "${TMPlbl}" == "${IMAGElbl}" ] && echo -e "\tNo Diskless ${TMPnme} Upgrade Archives Found"
+	fi
+	declare -i nwint=0
+	if [ ${nwsze} -gt 0 ];then
+		echo -e "\tNew ${TMPnme} Install Archives Found:"
+		while [ ${nwint} -lt ${nwsze} ];do
+			echo -e "\t\t${cnter} -\t${newimages[${nwint}]}"
+			cnter=${cnter}+1
+			nwint=${nwint}+1
+		done
+	else
+		echo -e "\tNo ${TMPnme} Install Archives Found:"
+	fi
+	echo -e "\tEnter - Back to ${TMPnme} Menu"
+	echo -e "Enter Choice:"
+	Read upins
+	IsValidInt "${upins}" $(( ${cnter}-1 ))
+	if [ $? == 0 ];then
+		if [ ${upins} -le ${upint} ];then
+			upins=$(( ${upins}-1 ))
+			arch="${upgrades[${upins}]}"
+			wha=Upgrade
+		else
+			upins=$(( ${upins}-${upint}-1 ))
+			arch="${newimages[${upins}]}"
+			wha=Install
+		fi
+		echo -e "\nRun and Install New ${TMPnme} ${wha} \"${arch}\"?"
+		archdir=`echo "${defaultdisk}${arch}" | sed -r 's/(.*)\/.*/\1/'`
+		arch=`echo "${arch}" | sed -e 's/.*\///'`
+		archd=${wha}ed_`echo ${arch} | sed -e s/"\.tgz"//`
+		echo -e "Enter Yes or No"
+		Read runit CAP
+		if [ "${runit}" == "YES" ];then
+			clear
+			echo -e "Running ${TMPnme} ${wha} - DO NOT KILL THE SCRIPT"
+			if [ -d "${archdir}" ] && [ -e "${archdir}/${arch}" ];then
+				echo -e "Extracting ${arch}..."
+				pushd ${archdir} > /dev/null
+				mkdir ${archd}
+				tar -xzf ${arch} -C ${archd}
+				archp=`ls -1 ${archd} | grep -m 1 ".*"`
+				dlesdir="${defaultdisk}${archd}/${archp}/"
+			else
+				echo -e "\nDirectory '${archdir}' or Archive '${arch}' missing"
+				echo -e "Hit Enter to Continue:" && Read nothing
+				ImageUpgradeInstall "${1}"
+				return
+			fi
+			if [ "${wha}" == "Upgrade" ];then
+				if [ -d "${archd}/${archp}" ] && [ -e "${archd}/${archp}/diskless.sh" ];then
+					pushd ${archd}/${archp} > /dev/null
+					nwim=`grep -m 1 "ni" diskless.sh | sed -e s/'"'//g -e s/'.*='//`
+					./diskless.sh
+					popd > /dev/null
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					AutoAddImage "${TMPlbl}" "${nwim}"
+					echo -e "Hit Enter to Continue:"
+					Read nothing
+					return
+				else
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					echo -e "\nDirectory '${archd}/${archp}' or Script '${archd}/${archp}/diskless.sh' missing"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					ImageUpgradeInstall "${1}"
+					return
+				fi
+			elif [ "${1}" == "${IMAGElbl}" ];then
+				if [ -d "${archd}/${archp}" ];then
+					pushd ${archd}/${archp} > /dev/null
+					diskless_arch=`ls -1 *root_snap.tgz | grep -m 1 ".*"`
+					if [ -e "${diskless_arch}" ];then
+						echo -e "Extracting ${diskless_arch}..."
+						mkdir NFSROOT
+						tar -xzf ${diskless_arch} -C NFSROOT
+						nwim=`ls -1 NFSROOT/ | grep -m 1 ".*"`
+						if [ ! -d "NFSROOT/${nwim}" ];then
+							popd > /dev/null
+							popd > /dev/null
+							if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+								\rm -rf ${archdir}/${archd}
+							fi
+							echo -e "${TMPnme} ${nwim} Archive is Incorrect"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						if [ -d "${defaultdisk}${nwim}" ];then
+							popd > /dev/null
+							popd > /dev/null
+							if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+								\rm -rf ${archdir}/${archd}
+							fi
+							echo -e "${TMPnme} ${nwim} appears to be installed already"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						\mv -f NFSROOT/${nwim} ${defaultdisk}
+					else
+						popd > /dev/null
+						popd > /dev/null
+						if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+							\rm -rf ${archdir}/${archd}
+						fi
+						echo -e "\nRoot & Snapshot Archive for '${arch}' is missing"
+						echo -e "Hit Enter to Continue:" && Read nothing
+						ImageUpgradeInstall "${1}"
+						return
+					fi
+					tftp_arch=""
+					declare -i cnt_tftp_archs=`ls -1 *tftp.tgz | grep -c ".*"`
+					if [ ${cnt_tftp_archs} -gt 1 ];then					
+						for test_archs in `ls -1 *tftp.tgz`;do
+						declare -i tst_archtmp=`tar -tzf ${test_archs} | grep -c "initrd.img"`
+							if [ ${tst_archtmp} -gt 0 ];then
+								tftp_arch=${test_archs}
+								break
+							fi
+						done
+					else
+						tftp_arch=`ls -1 *tftp.tgz | grep -m 1 ".*"`
+					fi
+					if [ -e "${tftp_arch}" ];then
+						echo -e "Extracting ${tftp_arch}..."
+						mkdir TFTP
+						tar -xzf ${tftp_arch} -C TFTP
+						nwtftp=`find TFTP/ -name initrd.img | sed -e s/"\/initrd.img"//`
+						if [ ! -d "${nwtftp}" ];then
+							popd > /dev/null
+							popd > /dev/null
+							if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+								\rm -rf ${archdir}/${archd}
+							fi
+							echo -e "${TMPnme} ${nwim} Archive is Incorrect"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						\mv -f ${nwtftp} ${defaulttftp}
+						cbase=`find TFTP/ -name "C_base*"`
+						if [ -e "${cbase}" ];then
+							\mv -f ${cbase} ${defaulttftp}pxelinux.cfg/C_base_${nwim}
+						fi
+					else
+						popd > /dev/null
+						popd > /dev/null
+						if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+							\rm -rf ${archdir}/${archd}
+						fi
+						echo -e "\nTFTP Archive for '${arch}' is missing"
+						echo -e "Hit Enter to Continue:" && Read nothing
+						ImageUpgradeInstall "${1}"
+						return
+					fi
+					rtpth=`eval echo "${defaultdisk}${nwim}/*/root" | sed -r 's/(.*)\/.*/\1/'`
+					SetExports "${TMPlbl}" "${rtpth}" "${nwim}"
+					if [ -e "${archd}/diskless.sh" ];then #Check For Script to run
+						echo -e "Running diskless.sh"
+						./diskless.sh
+					fi
+					popd > /dev/null
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					AutoAddImage "${TMPlbl}" "${nwim}"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					return 0
+				else
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					echo -e "\nDirectory '${archd}' is missing"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					ImageUpgradeInstall "${1}"
+					return
+				fi
+			else
+				if [ -d "${archd}/${archp}" ];then
+					pushd ${archd}/${archp} > /dev/null
+					npu_arch=`ls -1 *root.tgz | grep -m 1 ".*"`
+					if [ -e "${npu_arch}" ];then
+						echo -e "Extracting ${npu_arch}..."
+						mkdir NPUROOT
+						tar -xzf ${npu_arch} -C NPUROOT
+						nwim=`ls -1 NPUROOT/ | grep -m 1 ".*"`
+						if [ ! -d "NPUROOT/${nwim}" ];then
+							popd > /dev/null
+							popd > /dev/null
+							if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+								\rm -rf ${archdir}/${archd}
+							fi
+							echo -e "${TMPnme} ${nwim} Archive is Incorrect"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						if [ -d "${defaultdisk}${nwim}" ];then
+							popd > /dev/null
+							popd > /dev/null
+							if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+								\rm -rf ${archdir}/${archd}
+							fi
+							echo -e "${TMPnme} ${nwim} appears to be installed already"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						\mv -f NPUROOT/${nwim} ${defaultdisk}
+					else
+						popd > /dev/null
+						popd > /dev/null
+						if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+							\rm -rf ${archdir}/${archd}
+						fi
+						echo -e "\nRoot Archive for '${arch}' is missing"
+						echo -e "Hit Enter to Continue:" && Read nothing
+						ImageUpgradeInstall "${1}"
+						return
+					fi
+					tftp_arch=""
+					declare -i cnt_tftp_archs=`ls -1 *tftp.tgz | grep -c ".*"`
+					if [ ${cnt_tftp_archs} -gt 1 ];then					
+						for test_archs in `ls -1 *tftp.tgz`;do
+						declare -i tst_archtmp=`tar -tzf ${test_archs} | grep -c "vmlinux"`
+							if [ ${tst_archtmp} -gt 0 ];then
+								tftp_arch=${test_archs}
+								break
+							fi
+						done
+					else
+						tftp_arch=`ls -1 *tftp.tgz | grep -m 1 ".*"`
+					fi
+					if [ -e "${tftp_arch}" ];then
+						echo -e "Extracting ${tftp_arch}..."
+						mkdir TFTP
+						tar -xzf ${tftp_arch} -C TFTP
+						nwtftp=`find TFTP/ -name "vmlinux*" -type f | sed -e s/"\/vmlinux.*"// | grep -m 1 ".*"`
+						if [ ! -d "${nwtftp}" ];then
+							echo -e "${TMPnme} ${nwim} Archive is Incorrect"
+							echo -e "Hit Enter to Continue:" && Read nothing
+							ImageUpgradeInstall "${1}"
+							return
+						fi
+						\mv -f ${nwtftp} ${defaulttftp}
+					else
+						popd > /dev/null
+						popd > /dev/null
+						if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+							\rm -rf ${archdir}/${archd}
+						fi
+						echo -e "\nTFTP Archive for '${arch}' is missing"
+						echo -e "Hit Enter to Continue:" && Read nothing
+						ImageUpgradeInstall "${1}"
+						return
+					fi
+					rtpth=`find ${defaultdisk}${nwim} -name "octeon_rootnfs" -type d -maxdepth 1 | grep -m 1 ".*"`
+					SetExports "${TMPlbl}" "${rtpth}" "${nwim}"
+					if [ -e "${archd}/diskless.sh" ];then #Check For Script to run
+						echo -e "Running diskless.sh"
+						./diskless.sh
+					fi
+					popd > /dev/null
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					AutoAddImage "${TMPlbl}" "${nwim}"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					return 0
+				else
+					popd > /dev/null
+					if [ -n "${archdir}" ] && [ -n "${archd}" ] && [ -d "${archdir}/${archd}" ];then
+						\rm -rf ${archdir}/${archd}
+					fi
+					echo -e "\nDirectory '${archd}' is missing"
+					echo -e "Hit Enter to Continue:" && Read nothing
+					ImageUpgradeInstall "${1}"
+					return
+				fi
+			fi
+		else
+			echo -e "\n${TMPnme} ${wha} Canceled" && sleep 1
+			ImageUpgradeInstall "${1}"
+			return
+		fi
+	elif [ -z "${upins}" ];then
+		return
+	else
+		echo "Invalid Choice..." && sleep 1
+		ImageUpgradeInstall "${1}"
+		return
+	fi
+}
+
+#Set IMAGE variables
+SetImage() { #Takes Image directory as parameter and diskless directory optional
+	if [ $# -eq 1 ] || [ $# -eq 2 ];then
+		SetVars "${IMAGElbl}" TMP
+		[ $? -ne 0 ] && echo "SetImage: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		[ $# -eq 2 ] && dirles="${2}" || dirles=${defaultdisk}
+	else
+		echo "SetImage: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	pth=${dirles}${1}
+	if [ $(echo ${dirles} | grep -c "/$") -eq 0 ];then
+		dirles="${dirles}/"
+		pth=${dirles}${1}
+	fi
+	nfsroo=$(find ${pth} -name "root" -type d -maxdepth 2 -prune | \
+		sed -r 's/(.*)\/.*/\1/' | \
+		sed -e s/"$(echo ${dirles} | sed -e s/"\/"/"\\\\\/"/g)"//g | uniq | grep -m 1 ".*")
+	tft=$(echo ${nfsroo} | sed -e 's/^\///' | sed -e 's/\//_/g')
+	cfle="${defaulttftp}pxelinux.cfg/C_base_${1}"
+	if [ -e "${cfle}" ];then
+		ioptions=$(cat ${cfle} | grep -o -m 1 "console.*")
+	else
+		ioptions='console=ttyS0,115200n8 reboot=c i8042.reset i8042.noaux'
+	fi
+	if [ -d "${defaulttftp}${tft}" ];then
+		rds=`GetRDSize "${defaulttftp}${tft}"`
+	else
+		rds="26000"
+		tft=""
+	fi
+	if [ "${dirles}" != "${defaultdisk}" ];then
+		clindx=`GetIndex ${SERVERlbl} CLIP`
+		nfsroo="${SERVER[${clindx}]}:/${nfsroo}"
+	fi
+	unset IMAGE
+	IMAGE[0]=${1}
+	tfindx=`GetIndex ${IMAGElbl} TFTP`
+	[ -n "${tft}" ] && IMAGE[${tfindx}]="${tft}"
+	nfindx=`GetIndex ${IMAGElbl} NFSROOT`
+	[ -n "${nfsroo}" ] && IMAGE[${nfindx}]="${nfsroo}"
+	opindx=`GetIndex ${IMAGElbl} OPTS`
+	[ -n "${ioptions}" ] && IMAGE[${opindx}]="${ioptions}"
+	rdindx=`GetIndex ${IMAGElbl} RDSIZE`
+	[ -n "${rds}" ] && IMAGE[${rdindx}]=${rds}
+}
+
+#Set NPU IMAGE variables
+SetNPUImage() { #Takes NPU Image directory as parameter and diskless directory
+	if [ $# -eq 1 ] || [ $# -eq 2 ];then
+		SetVars "${NPU_IMAGElbl}" TMP
+		[ $? -ne 0 ] && echo "SetNPUImage: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		[ $# -eq 2 ] && dirles="${2}" || dirles=${defaultdisk}
+	else
+		echo "SetNPUImage: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	pth="${dirles}${1}"
+	if [ $(echo ${dirles} | grep -c "/$") -eq 0 ];then
+		dirles="${dirles}/"
+		
+	fi
+	if [ "${dirles}" != "${defaultdisk}" ];then
+		pth="${dirles}${1}/"
+		dirles="${pth}"
+	fi
+	odir="${1}"
+	nfsroo=$(find ${pth} -name "octeon_rootnfs" -type d -maxdepth 2 -prune | \
+		sed -e s/"$(echo ${dirles} | sed -e s/"\/"/"\\\\\/"/g)"//g | \
+		uniq | grep -m 1 ".*")
+	if [ "${dirles}" != "${defaultdisk}" ];then
+		clindx=`GetIndex ${SERVERlbl} CLIP`
+		nfsroo="${SERVER[${clindx}]}:${pth}${nfsroo}"
+	fi
+	tft="${1}/vmlinux.64"
+	noptions='bootoctlinux 31000000 coremask=3 root=/dev/nfs'
+	if [ -e "${defaulttftp}${tft}" ];then
+		tft="tftpboot 31000000 ${tft}"
+	else
+		tft=""
+	fi
+	unset NPU_IMAGE
+	NPU_IMAGE[0]=${odir}
+	tfindx=`GetIndex ${NPU_IMAGElbl} TFTP`
+	[ -n "${tft}" ] && NPU_IMAGE[${tfindx}]="${tft}"
+	nfindx=`GetIndex ${NPU_IMAGElbl} NFSROOT`
+	[ -n "${nfsroo}" ] && NPU_IMAGE[${nfindx}]="${nfsroo}"
+	opindx=`GetIndex ${NPU_IMAGElbl} OPTS`
+	[ -n "${noptions}" ] && NPU_IMAGE[${opindx}]="${noptions}"
+}
+
+#Prints the NHuname info for Configured Images
+ShowNHuname() {
+	SetVars "${IMAGElbl}"
+	[ $? -ne 0 ] && echo "ShowNHuname: Incorrect Type passed - Exiting" && Exit 1
+	clear
+	echo -e "Select ${CURRnme} to view Release Notes:"
+	ShowIt ${CURRlbl}
+	eval declare -i nhmax=$\{#${CURRs}[@]}
+	echo -e "\t\tEnter - Back to ${CURRnme} Menu"
+	echo "Enter Choice:"
+	Read nhpick
+	IsValidInt "${nhpick}" ${nhmax}
+	if [ $? == 0 ];then
+		nhpick=$(( ${nhpick}-1 ))
+		rfsdx=`GetIndex ${CURRlbl} NFSROOT`
+		eval nhos=$\{${CURRs}[${nhpick}]}
+		GetIt ${CURRlbl} ${nhos}
+		eval nhdir=\"$\{${CURR}[${rfsdx}]}\"
+		declare -i ctst=$(echo ${nhdir} | \
+			egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+		if [ ${ctst} -gt 0 ];then
+			nhdir=$(echo "${nhdir}" | sed -e s/".*:"//g)
+		else
+			nhdir="${defaultdisk}${nhdir}"
+		fi
+		nhdir="${nhdir}/root/"
+		nhchk="${nhdir}/bin/NHuname"
+		if [ -e "${nhchk}" ];then
+			chroot ${nhdir} NHuname -a | more
+			echo -e "\nHit Enter to Continue:"
+			Read nothing
+			ShowNHuname
+		else
+			echo -e "NHuname for given ${CURRnme} ${nhos} not found!"
+			echo -e "\nHit Enter to Continue:"
+			Read nothing
+			ShowNHuname
+		fi
+	elif [ -z "${nhpick}" ];then
+		nothing=nothing
+	else
+		echo "Invalid Choice..." && sleep 1
+		ShowNHuname
+	fi
+}
+
+#Probes default diskless path for diskless Images
+#Diskless default directory can be provied as optional parameter
+CheckImages() { #Takes Type and optional parameter - default diskless directory and optional third parameter AUTO to auto configure
+	if [ $# -ge 1 ];then
+		SetVars "${1}"
+		[ $? -ne 0 ] && echo "CheckImages: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "CheckImages: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	[ -n "${2}" ] && defdisk=${2} || defdisk=${defaultdisk}
+	declare -i tstsl=`echo ${defdisk} | grep -c "/$"`
+	[ ${tstsl} -eq 0 ] && defdisk="${defdisk}/"
+	declare -a imarr=()
+	if [ -d "${defdisk}" ];then 
+		declare -a arr=(`ls -1 ${defdisk}`)
+		if [ ${#arr[@]} -gt 0 ];then
+			declare -i x=0
+			declare -i y=0
+			case ${1} in
+				"${IMAGElbl}" )
+					while [ ${x} -lt ${#arr[@]} ];do
+						[ -d ${defdisk}${arr[${x}]}/*/root/\# ] && \
+							[ -e ${defdisk}${arr[${x}]}/*/snapshot/files.custom ] && \
+							imarr[${y}]="${arr[${x}]}" && y=${y}+1
+						x=${x}+1
+					done
+				;;
+				"${NPU_IMAGElbl}" )
+					while [ ${x} -lt ${#arr[@]} ];do
+						[ -d ${defdisk}${arr[${x}]}/octeon_rootnfs ] && \
+							imarr[${y}]="${arr[${x}]}" && y=${y}+1
+						x=${x}+1
+					done
+				;;
+				* )
+					echo -e "CheckImages: ${1} Not Supported - Exiting" && Exit 1
+				;;
+			esac
+		fi
+	fi
+	if [ "${3}" == "AUTO" ];then
+		AutoAddImage ${CURRlbl} ${imarr[@]}
+		echo -e "\nAll Valid ${TMPnme}s Added" && sleep 1
+		return
+	fi
+	clear
+	echo "Select ${CURRnme} or Option:"
+	echo -e "\t${defdisk} - Used as default search directory"
+	if [ ${#imarr[@]} -gt 0 ];then
+		declare -i s=1
+		for ar in "${imarr[@]}";do
+			SearchData ${CURRlbl} "^${CURRid}=${ar}$" "${CURRid}"
+			[ ${#searchar[@]} -gt 0 ] && sved="\t(SAVED)" || sved=""
+			echo -e "\t${s} -\t${CURRnme} \"${ar}\"${sved}"
+			s=${s}+1
+		done
+		echo -e "\tALL -\tAuto Configure ALL ${TMPnme}s"
+	else
+		echo -e "\tNo ${CURRnme}s found in ${defdisk}"
+	fi
+	echo -e "\t\tA - Change default diskless directory"
+	if [ "${defdisk}" != "${defaultdisk}" ];then
+		echo -e "\t\tB - Restore default diskless directory"
+	fi
+	echo -e "\t\tEnter - Back to ${CURRnme} Menu"
+	echo "Enter Choice:"
+	Read imgopt CAP
+	IsValidInt "${imgopt}" ${#imarr[@]}
+	if [ $? -eq 0 ];then
+		imgopt=${imgopt}-1
+		imgid=${imarr[${imgopt}]}
+		case ${1} in
+			"${IMAGElbl}" )
+				SetImage "${imgid}" "${defdisk}"
+			;;
+			"${NPU_IMAGElbl}" )
+				SetNPUImage "${imgid}" "${defdisk}"
+			;;
+			* )
+				echo -e "CheckImages: ${1} Not Supported - Exiting" && Exit 1
+			;;
+		esac
+		clear
+		echo -e "${CURRnme} ${imgid} Data and Options:"
+		declare -i z=0
+		declare -i smax=${#CURRvars[@]}
+		while [ ${z} -lt ${smax} ];do
+			echo -e "\t${CURRnme}\t${CURRdesc[${z}]} - $(eval echo "\${${CURR}[${z}]}")"
+			z=${z}+1
+		done
+		echo -e "\t\tA - Edit/Save ${CURRnme} Configuration"
+		echo -e "\t\tB - Check Other ${CURRnme}s"
+		echo -e "\t\tEnter - Back to ${CURRnme} Menu"
+		echo "Enter Choice:"
+		Read nopt CAP
+		if [ "${nopt}" == "A" ];then
+			idindx=`GetIndex ${1} ${CURRid}`
+			eval datide=$\{${1}[${idindx}]}
+			if [ -n "${datide}" ];then
+				SearchData ${1} "${datide}" "${CURRid}"
+				if [ ${#searchar[@]} -gt 0 ];then
+					echo -e "\nThis ${CURRnme} \"${datide}\" is already saved in \"${searchar[0]}\""
+					echo -e "Hit Enter to Continue" && Read nothing
+					CheckImages ${1} "${defdisk}"
+				else
+					eval tmpide=$\{${CURRlbl}[0]}
+					EditData "${CURRlbl}" "${tmpide}" NEW
+				fi
+			else
+				echo -e "\nNot enough data obtained to save ${CURRnme}"
+				echo -e "Hit Enter to Continue" && Read nothing
+				CheckImages ${1} "${defdisk}"
+			fi
+		elif [ "${nopt}" == "B" ];then
+			CheckImages ${1} "${defdisk}"
+		elif [ -z "${nopt}" ];then #Back to Menu
+			nothing=nothing
+		else
+			echo "Invalid Choice..." && sleep 1
+			CheckImages ${1} "${defdisk}"
+		fi
+	elif [ -z "${imgopt}" ];then
+		return
+	elif [ "${imgopt}" == "ALL" ];then
+			AutoAddImage ${TMPlbl} ${imarr[@]}
+			echo -e "\nAll Valid ${TMPnme}s Added"
+			echo -e "Hit Enter to return to ${TMPnme} Menu"
+			read nothing
+			return
+	elif [ "${imgopt}" == "A" ];then
+		echo -e "\nEnter new path to search:"
+		Read pth
+		if [ -d "${pth}" ];then
+			CheckImages ${1} "${pth}"
+		else
+			echo -e "Directory \"${pth}\" does not exist - Search path not changed" && sleep 2
+			CheckImages ${1} "${defdisk}"
+		fi
+	elif [ "${imgopt}" == "B" ] && [ "${defdisk}" != "${defaultdisk}" ];then
+		CheckImages ${1} "${defaultdisk}"
+	else
+		echo "Invalid Choice..." && sleep 1
+		CheckImages ${1} "${defdisk}"
+	fi
+}
+
+#Auto configures NHOS and NPU Images if enough data is obtained
+AutoAddImage() { #Takes Type and Array of Images to Add
+	if [ $# -lt 1 ];then
+		echo "AutoAddImage: No Type passed - Exiting" && Exit 1
+	fi
+	SetVars "${1}"
+	[ $? -ne 0 ] &&	echo "AutoAddImage: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	declare -i sze=0
+	declare -i ipint=2
+	sze=$#
+	if [ $# -lt 2 ];then
+		echo -e "\nNo ${TMPnme}s to Add"
+		return 1
+	fi
+	clear
+	ntindx=`GetIndex ${CURRlbl} NOTE`
+	nfsindx=`GetIndex ${CURRlbl} NFSROOT`
+	nfsntry=`echo -e ${CURRdesc[${nfsindx}]} | sed -e 's/\t//g'`
+	aaimlog="Auto Add ${CURRnme} Log:"
+	echo  -e "Auto Configuring all ${CURRnme}s:"
+	while [ ${ipint} -le ${sze} ];do
+		SetVars "${1}"
+		adim="${!ipint}"
+		clear
+		echo -e "${CURRnme} -\t${adim}"
+		if [ "${CURRlbl}" == "${IMAGElbl}" ];then
+			SetImage "${adim}"
+		elif [ "${CURRlbl}" == "${NPU_IMAGElbl}" ];then
+			SetNPUImage "${adim}"
+		else
+			echo "AutoAddImage: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		fi
+		eval idnme=\"$\{${CURR}[0]}\"
+		idnme=`echo "${idnme}" | sed -e 's/ //'`
+		eval addide=\"$\{${CURRlbl}[${nfsindx}]}\"
+		if [ -n "${addide}" ];then
+			SearchData ${1} "${addide}" "NFSROOT"
+			if [ ${#searchar[@]} -gt 0 ];then
+				echo -e "\nThis ${nfsntry} \"${addide}\" is already saved in ${CURRnme} \"${searchar[0]}\""
+				aaimlog="${aaimlog}\n\t${adim}\t - This ${nfsntry} '${addide}' is already saved in ${CURRnme} '${searchar[0]}'"
+				ipint=${ipint}+1
+				continue
+			fi
+			declare -i tstint=1
+			while  [ ${tstint} -lt ${CURRlim} ];do
+				eval adtmp=\"$\{${CURR}[${tstint}]}\"
+				tstntry=`echo -e ${CURRdesc[${tstint}]} | sed -e s/"\t"//g`
+				if [ -z "${adtmp}" ];then
+					echo -e "\tEntry for ${CURRnme} ${tstntry} cannot be empty"
+					aaimlog="${aaimlog}\n\t${adim}\t - Entry for ${CURRnme} ${tstntry} cannot be empty - Not Saved"
+					ipint=${ipint}+1
+					continue 2
+				else
+					echo -e "\t${CURRnme} =\t${adtmp}"
+				fi
+				tstint=${tstint}+1
+			done
+			eval $CURR[${ntindx}]=\"${CURRnme} Data Auto Populated\"
+			DoesExist ${CURRid} "${CURRlbl}" "${idnme}"
+			if [ $? -ne 1 ];then
+				echo -e "\n${CURRnme} with id '${idnme}' already exists"
+				aaimlog="${aaimlog}\n\t${adim}\t - ${CURRnme} with id '${idnme}' already exists"
+				ipint=${ipint}+1
+				continue
+			fi
+			SetData ${CURRlbl} SAVEAS
+			if [ $? -eq 0 ];then
+				echo -e "\nSaved ${CURRnme} ${adim} as ${idnme}"
+				aaimlog="${aaimlog}\n\t${adim}\t - Saved ${CURRnme} ${adim} as ${idnme}"
+			else
+				echo -e "\${CURRnme} ${adim} NOT Saved"
+				aaimlog="${aaimlog}\n\t${adim}\t - ${CURRnme} ${adim} NOT Saved"
+				ipint=${ipint}+1
+				continue
+			fi
+		else
+			echo -e "Not enough data obtained to save ${CURRnme} ${adim}"
+			aaimlog="${aaimlog}\n\t${adim}\t - Not enough data obtained to save ${CURRnme} ${adim}"
+			ipint=${ipint}+1
+			continue
+		fi
+		ipint=${ipint}+1
+	done
+	clear
+	echo -e "${aaimlog}" && sleep 2
+}
+
+#Auto configures Shelfs and Blades if enough data is obtained
+AutoAddIP() { #Takes Type and Array of IP's to Add
+	SetVars "${1}"
+	[ $? -ne 0 ] &&	echo "AutoAddIP: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	declare -i sze=0
+	declare -i ipint=2
+	sze=$#
+	if [ $# -lt 2 ];then
+		echo -e "\nNo ${CURRnme} IP Address to Add"
+		return
+	fi
+	clear
+	ntindx=`GetIndex ${CURRlbl} NOTE`
+	macindx=`GetIndex ${CURRlbl} MAC`
+	mcntry=`echo -e ${CURRdesc[${macindx}]} | sed -e 's/\t//g'`
+	aaiplog="Auto Add ${CURRnme} Log:"
+	echo  -e "Auto Configuring all ${CURRnme}s:"
+	while [ ${ipint} -le ${sze} ];do
+		SetVars "${1}"
+		adip="${!ipint}"
+		IsValidIP "${adip}"
+		if [ $? -ne 0 ];then
+			echo "Invalid ${CURRnme} IP \"IP${adip}\""
+			aaiplog="${aaiplog}\n\t${adip}\t - Invalid ${CURRnme} IP '${adip}'"
+			ipint=${ipint}+1
+			continue
+		fi
+		if [ ${sze} -gt 2 ] && [ ${ipint} -eq 2 ];then
+			SetShms
+			SetShelfMatrix
+		fi
+		DoGetSlot ${adip}
+		echo -e "\n"
+		eval addide=\"$\{${CURRlbl}[${macindx}]}\"
+		if [ -n "${addide}" ];then
+			SearchData ${1} "${addide}" "MAC"
+			if [ ${#searchar[@]} -gt 0 ];then
+				echo -e "\nThis ${mcntry} \"${addide}\" is already saved in ${CURRnme} \"${searchar[0]}\""
+				aaiplog="${aaiplog}\n\t${adip}\t - This ${mcntry} '${addide}' is already saved in ${CURRnme} '${searchar[0]}'"
+				ipint=${ipint}+1
+				continue
+			fi
+			declare -i tstint=1
+			while  [ ${tstint} -lt ${CURRlim} ];do
+				eval adtmp=\"$\{${CURR}[${tstint}]}\"
+				if [ -z "${adtmp}" ];then
+					tstntry=`echo -e ${CURRdesc[${tstint}]} | sed -e s/"\t"//g`
+					echo -e "\tEntry for ${CURRnme} ${tstntry} cannot be empty"
+					aaiplog="${aaiplog}\n\t${adip}\t - Entry for ${CURRnme} ${tstntry} cannot be empty - Not Saved"
+					ipint=${ipint}+1
+					continue 2
+				fi
+				tstint=${tstint}+1
+			done
+			eval $CURR[${ntindx}]=\"${CURRnme} Data Auto Populated\"
+			if [ "${1}" == "${SHELFlbl}" ];then
+				idnme=Shelf_`echo "${adip}" | sed -e s/"^.*\."//`
+			elif [ "${1}" == "${BLADElbl}" ];then
+				tpindx=`GetIndex ${CURRlbl} TYP`
+				eval tpnme=\"$\{${CURRlbl}[${tpindx}]}\"
+				idnme=${tpnme}_${addide}
+			else
+				echo -e "AutoAddIP: Incorrect parameter \"${1}\" passed - Exiting" && Exit 1
+			fi
+			idnme=`echo "${idnme}" | sed -e 's/ //'`
+			DoesExist ${CURRid} "${CURRlbl}" "${idnme}"
+			if [ $? -ne 1 ];then
+				echo -e "\n${CURRnme} with id '${idnme}' already exists"
+				aaiplog="${aaiplog}\n\t${adip}\t - ${CURRnme} with id '${idnme}' already exists"
+				ipint=${ipint}+1
+				continue
+			fi
+			eval $CURR[0]=\"${idnme}\"
+			SetData ${CURRlbl} SAVEAS
+			if [ $? -eq 0 ];then
+				echo -e "\nSaved ${CURRnme} ${adip} as ${idnme}"
+				aaiplog="${aaiplog}\n\t${adip}\t - Saved ${CURRnme} ${adip} as ${idnme}"
+			else
+				echo -e "\${CURRnme} ${adip} NOT Saved"
+				aaiplog="${aaiplog}\n\t${adip}\t - ${CURRnme} ${adip} NOT Saved"
+				ipint=${ipint}+1
+				continue
+			fi
+			if [ "${1}" == "${BLADElbl}" ];then
+				bide=${idnme}
+				if [ -n "${bide}" ];then
+					SearchData ${BLADE_CONFlbl} "${bide}" "BID"
+					if [ ${#searchar[@]} -gt 0 ];then
+						echo -e "\n${BLADE_CONFnme} for \"${bide}\" is already saved in ${BLADE_CONFnme} \"${searchar[0]}\""
+						aaiplog="${aaiplog}\n\t\t\t - ${BLADE_CONFnme} for \"${bide}\" is already saved in ${BLADE_CONFnme} \"${searchar[0]}\""
+						ipint=${ipint}+1
+						continue
+					fi
+					bindx=`GetIndex ${BLADE_CONFlbl} BID`
+					eval $BLADE_CONFlbl[${bindx}]=\"${bide}\"
+					declare -i tstint=1
+					while  [ ${tstint} -lt ${BLADE_CONFlim} ];do
+						eval adtmp=\"$\{${BLADE_CONFlbl}[${tstint}]}\"
+						if [ -z "${adtmp}" ];then
+							tstntry=`echo -e ${BLADE_CONFdesc[${tstint}]} | sed -e s/"\t"//g`
+							echo -e "\tEntry for ${BLADE_CONFnme} ${tstntry} cannot be empty"
+							aaiplog="${aaiplog}\n\t\t\t - Entry for ${BLADE_CONFnme} ${tstntry} cannot be empty - Not Saved"
+							ipint=${ipint}+1
+							continue 2
+						fi
+						tstint=${tstint}+1
+					done
+					bcnindx=`GetIndex ${BLADE_CONFlbl} NOTE`
+					eval $BLADE_CONFlbl[${bcnindx}]=\"${BLADE_CONFnme} Data Auto Populated\"
+					hoindx=`GetIndex ${BLADE_CONFlbl} HOST`
+					eval honme=\"$\{${BLADE_CONFlbl}[${hoindx}]}\"
+					bcnme=${idnme}_${honme}
+					bcnme=`echo "${bcnme}" | sed -e 's/ //'`
+					DoesExist ${BLADE_CONFvars[0]} "${BLADE_CONFlbl}" "${bcnme}"
+					if [ $? -ne 1 ];then
+						echo -e "\n${BLADE_CONFnme} with id '${bcnme}' already exists"
+						aaiplog="${aaiplog}\n\t\t\t - ${BLADE_CONFnme} with id '${bcnme}' already exists"
+						ipint=${ipint}+1
+						continue
+					fi
+					eval $BLADE_CONFlbl[0]=\"${bcnme}\"
+					SetData ${BLADE_CONFlbl} SAVEAS
+					if [ $? -eq 0 ];then
+						echo -e "\nSaved ${BLADE_CONFnme} for ${idnme} as ${bcnme}"
+						aaiplog="${aaiplog}\n\t\t\t - Saved ${BLADE_CONFnme} for ${idnme} as ${bcnme}"
+					else
+						echo -e "\n${BLADE_CONFnme} for ${idnme} NOT Saved"
+						aaiplog="${aaiplog}\n\t\t\t - ${BLADE_CONFnme} for ${idnme} NOT Saved"
+						ipint=${ipint}+1
+						continue
+					fi
+				else
+					echo -e "Not enough data obtained to save ${BLADE_CONFnme}"
+					aaiplog="${aaiplog}\n\t\t\t - Not enough data obtained to save ${BLADE_CONFnme}"
+					ipint=${ipint}+1
+					continue
+				fi
+			fi
+		else
+			echo -e "Not enough data obtained to save ${CURRnme} ${adip}"
+			aaiplog="${aaiplog}\n\t${adip}\t - Not enough data obtained to save ${CURRnme} ${adip}"
+			ipint=${ipint}+1
+			continue
+		fi
+		ipint=${ipint}+1
+	done
+	clear
+	echo -e "${aaiplog}" && sleep 2
+}
+
+#Report all Active Shelf Manager and Blade IP's if no paramaters are given
+CheckIP() { #Takes Type and optional second parameter 1 to avoid re-searching for IP's Optional third paramater to Check specific IP
+	if [ $# -ge 1 ];then
+		case "${1}" in
+			"${BLADElbl}")
+				iprng="${cliip}"
+				iparr=bladips
+				setfunc=SetBlades
+				chrngopt=1
+			;;
+			"${SHELFlbl}")
+				iprng="${sheip}"
+				iparr=shelips
+				setfunc=SetShms
+				chrngopt=2
+			;;
+			"${NPUlbl}") #Not currently configured to work
+				echo -e "NPU Search not Supported - Exiting" && Exit 1
+			;;
+			*)
+				echo "CheckIP: Wrong parameter passed \"$1\": Exiting"
+				Exit 1
+			;;
+		esac
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] && echo "CheckIP: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "CheckIP: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	ipopt=""
+	res=""
+	clear
+	if [ -z "${3}" ];then
+		echo "Select ${TMPnme} IP or Option:"
+		echo -e "\t${iprng}* - Used as Default ${TMPnme} IP Range"
+		if [ "${2}" == "1" ];then
+			if [ ${#iparr[@]} -eq 0 ];then
+				eval ${setfunc}
+			fi
+		else
+			eval ${setfunc}
+		fi
+		declare -i x=1
+		for ipp in $(eval echo "\${${iparr}[@]}");do
+			echo -e "\t${x} -\t ${TMPnme} ${ipp}"
+			x=${x}+1
+		done
+		if [ ${x} -gt 1 ];then
+			echo -e "\tALL -\t Auto Configure ALL ${TMPnme}s"
+		else
+			x=0
+			echo -e "\tNo ${TMPnme}s Found"
+		fi
+		x=${x}-1
+		echo -e "\t\tA - Check For Specific ${TMPnme} IP"
+		echo -e "\t\tB - Change Default ${TMPnme} IP Range"
+		echo -e "\t\tEnter - Back to ${TMPnme} Menu"
+		echo "Enter Choice:"
+		Read ipopt CAP
+		IsValidInt "${ipopt}" ${x}
+		res=$?
+	fi
+	if [ "${res}" == "0" ] || [ -n "${3}" ];then #Get IP info
+		if [ -n "${3}" ];then
+			getchkip=${3}
+		else
+			getchkip=$(eval echo "\${${iparr}[$(( ${ipopt}-1 ))]}")
+		fi
+		DoGetSlot ${getchkip}
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] && echo "CheckIP: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+		echo -e "\n${TMPnme} Options:"
+		echo -e "\t\tA - Save/Edit ${TMPnme} Configuration"
+		echo -e "\t\tB - Check Other ${TMPnme}s"
+		if [ "${TMPlbl}" == "${SHELFlbl}" ];then
+			echo -e "\t\tC - Get ${TMPnme} Slot Info"
+			echo -e "\t\tD - Get Expanded ${TMPnme} Slot Info"
+		fi
+		echo -e "\t\tEnter - Back to ${TMPnme} Menu"
+		echo "Enter Choice:"
+		Read nopt CAP
+		if [ "${nopt}" == "A" ];then
+			mindx=`GetIndex ${1} MAC`
+			eval datide=$\{${1}[${mindx}]}
+			if [ -n "${datide}" ];then
+				SearchData ${1} "${datide}" "MAC"
+				if [ ${#searchar[@]} -gt 0 ];then
+					echo -e "\nThis MAC Address \"${datide}\" is already saved in ${TMPnme} \"${searchar[0]}\""
+					echo -e "Hit Enter to Continue" && Read nothing
+					if [ "${1}" != "${BLADElbl}" ];then
+						CheckIP ${1} 1
+						return
+					else
+						tmpide=${searchar[0]}
+					fi
+				else
+					OptChange "${1}" 0
+					eval tmpide=$\{${1}[0]}
+					EditData "${1}" "${tmpide}" NEW
+				fi
+				if [ "${1}" == "${BLADElbl}" ];then
+					SearchData ${BLADE_CONFlbl} "${tmpide}" "BID"
+					if [ ${#searchar[@]} -gt 0 ];then
+						echo -e "\n${BLADE_CONFnme} for \"${tmpide}\" is already saved in ${BLADE_CONFnme} \"${searchar[0]}\""
+						echo -e "Enter \"Save\" to Save as New ${BLADE_CONFnme} or Hit Enter to Skip"
+						Read sveconf CAP
+						if [ "${sveconf}" != "SAVE" ];then
+							CheckIP ${1} 1
+							return
+						fi
+					fi
+					bindx=`GetIndex ${BLADE_CONFlbl} BID`
+					if [ -n "${BLADE[0]}" ];then
+						BLADE_CONF[${bindx}]=${BLADE[0]}
+					else
+						BLADE_CONF[${bindx}]=${tmpide}
+					fi
+					OptChange "${BLADE_CONFlbl}" 0
+					tmpide=${BLADE_CONF[0]}
+					EditData "${BLADE_CONFlbl}" "${tmpide}" NEW
+				fi
+			else
+				echo -e "\nNot enough data obtained to save"
+				echo -e "Hit Enter to Continue"
+				Read nothing
+				CheckIP ${1} 1
+				return
+			fi
+		elif [ "${nopt}" == "B" ];then
+			CheckIP ${1}
+			return
+		elif [ "${TMPlbl}" == "${SHELFlbl}" ] && [ "${nopt}" == "C" ];then
+			GetShelfInfo ${getchkip}
+			echo -e "\nHit Enter to Continue to Check ${TMPnme}s" && Read nothing
+			CheckIP ${1}
+			return
+		elif [ "${TMPlbl}" == "${SHELFlbl}" ] && [ "${nopt}" == "D" ];then
+			GetShelfInfo ${getchkip} full
+			echo -e "\nHit Enter to Continue to Check ${TMPnme}s" && Read nothing
+			CheckIP ${1}
+			return
+		elif [ -z "${nopt}" ];then #Back to Menu
+			return
+		else
+			echo "Invalid Choice..." && sleep 1
+			CheckIP ${1} 1
+			return
+		fi
+	elif [ "${ipopt}" == "ALL" ];then
+			AutoAddIP ${TMPlbl} $(eval echo "\${${iparr}[@]}")
+			echo -e "\nAll Valid ${TMPnme}s Added"
+			echo -e "Hit Enter to return to ${TMPnme} Menu"
+			read nothing
+			return
+	elif [ "${ipopt}" == "A" ];then
+		clear
+		echo -e "Current ${nme} Subnet = ${iprng}"
+		echo -e "\tEnter - Cancel"
+		echo -e "\tEnter final range of the ${TMPnme} for Subnet ${iprng}"
+		echo -e "Enter 0 to 255:"
+		Read iipopt
+		IsValidInt "${iipopt}" 255
+		if [ $? == 0 ];then
+			TestIp ${iprng}${iipopt}
+			if [ $? == 0 ];then #Get IP info
+				CheckIP ${1} 1 "${iprng}${iipopt}"
+				return
+			else
+				echo -e "${TMPnme} IP ${iprng}${iipopt} not found" && sleep 1
+				CheckIP ${1} 1
+				return
+			fi
+		elif [ -z "${iipopt}" ];then
+			CheckIP ${1} 1
+			return
+		else
+			echo "\"${iipopt}\" - Invalid Choice..." && sleep 1
+			CheckIP ${1} 1
+			return
+		fi
+	elif [ "${ipopt}" == "B" ];then
+		ChangeRange ${chrngopt}
+		CheckIP ${1}
+		return
+	elif [ -z "${ipopt}" ];then #Back to Menu
+		nothing=nothing
+	else
+		echo "Invalid Choice..." && sleep 1
+		CheckIP ${1} 1
+		return
+	fi
+}
+
+#Prints out Type information.
+#With only one parameter it prints all ID's
+#With second parameter ALL it prints out everything about the Type
+#With second parameter ID# it prints out data on that ID
+ShowIt() { #Takes first parameter type, Second parameter ALL or ID of type
+	if [ $# -ne 0 ];then
+		SetVars "${1}" TMP
+		[ $? -ne 0 ] &&	echo "ShowIt: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "ShowIt: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	declare -i z=0
+	if [ $# -gt 1 ];then
+		if [ "${2}" == "ALL" ];then
+			GetIt "${1}"
+			while [ ${z} -lt $(eval echo "\${#${TMPs}[@]}") ];do
+				echo -e "\t$(( ${z}+1 )) - \t${TMPnme} ID - $(eval echo "\${${TMPs}[${z}]}")"
+				ShowIt ${1} $(eval echo "\${${TMPs}[${z}]}")
+				z=${z}+1
+			done
+		else
+			GetIt "${1}" "${2}"
+			while [ ${z} -lt $(eval echo "\${#${TMP}[@]}") ];do
+				echo -e "\t${TMPnme}\t${TMPdesc[${z}]} - $(eval echo "\${${TMP}[${z}]}")"
+				z=${z}+1
+			done
+		fi
+	else
+		GetIt "${1}"
+		while [ ${z} -lt $(eval echo "\${#${TMPs}[@]}") ];do
+			echo -e "\t$(( ${z}+1 )) - \t${TMPnme} ID - $(eval echo "\${${TMPs}[${z}]}")"
+			z=${z}+1
+		done
+	fi
+}
+
+#Auto Configures Images then NPU Images then Shelfs and Blades
+AutoConfigure() {
+	#Auto Configure NHOS Images
+	CheckImages ${IMAGElbl} ${defaultdisk} AUTO
+	clear
+	#Auto Configure NPU Images
+	CheckImages ${NPU_IMAGElbl} ${defaultdisk} AUTO
+	clear
+	#Auto Configure Shelfs
+	SetShms
+	AutoAddIP ${SHELFlbl} ${shelips[@]}
+	echo -e "\nAll Valid ${SHELFnme}s Added" && sleep 2
+	clear
+	#Auto Configure Blades
+	SetBlades
+	AutoAddIP ${BLADElbl} ${bladips[@]}
+	echo -e "\nAll Valid ${BLADEnme}s Added" && sleep 2
+}
+
+#Sets default expect log in string
+#Returns configured expect login string
+#NEEDS - global var exv1 to set expect
+CreateExLogin() { #Takes Parameters Username, Machine, Password, and optional argument to execute
+	USERNAME=${1}
+	MACHINE=${2}
+	PASSWORD=${3}
+	ARG=" ${4}"
+	lgin="spawn ssh ${USERNAME}@${MACHINE}${ARG}\n
+expect {\n
+	\"Host key verification failed.\" {\n
+		send \"Removing line from known_hosts\n\"\n
+		exec sed -i -e \"/${MACHINE}/d\" /root/.ssh/known_hosts\n
+		spawn ssh ${USERNAME}@${MACHINE}${ARG}\n
+		expect \"yes/no)?\"\n
+		send \"yes\r\"\n
+		expect \"${USERNAME}@${MACHINE}'s password:\"\n
+		send \"${PASSWORD}\r\"\n
+	} \"yes/no)?\" {\n
+		send \"yes\r\"\n
+		expect \"${USERNAME}@${MACHINE}'s password:\"\n
+		send \"${PASSWORD}\r\"\n
+	} \"${USERNAME}@${MACHINE}'s password:\" {\n
+		send \"${PASSWORD}\r\"\n
+	} \"assword:\" {\n
+		send \"${PASSWORD}\r\"\n
+	} ${exv1} }"
+	echo ${lgin}
+}
+
+#Runs given command on remote system using parameters given
+#Prints out all data retrieved
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+ShmCon() { #Takes Shelf Manager IP, command, and password if required
+	[ -n "$3" ] && Password="${3}" || Password=${pass}
+	lgin=`CreateExLogin root $1 "$Password" "$2"`
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect  - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		exit 0
+	} ${exv}
+}
+ENDEXP
+}
+
+#Return exit status and prints out all data, exit status is used to verify pword
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+CheckPass() { #Takes IP and password as paramaters
+	[ -n "$2" ] && Password=$2 || Password=${pass}
+	lgin=`CreateExLogin root $1 "$Password"`
+	lgin=`echo ${lgin} | sed -e s/"}$"/" -re \"$prompt\" {\n exit 3\n } }"/`	
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		exit 0
+	}
+	"denied," {
+		exit 2
+	} ${exv}
+}
+ENDEXP
+	ret=$?
+	return ${ret}
+}
+
+#####Function to loginto and reboot blade 
+Rebootssh () { #Takes 4 parameters Username, IP, MAC, Password
+	Username=${1}
+	Machine=${2}
+	Mac=${3}
+	Password=${4}
+
+	lgin=`CreateExLogin ${Username} ${Machine} "${Password}"`
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		send "ifconfig | grep -i \"$Mac\" | grep -o \"eth\[0-9\]*\[0-9\]\" | xargs -i ifconfig {} | grep -o \"addr:\[0-9,.\]*\[0-9\]\" | sed -e s/\"addr:\"//\r"
+		expect {
+			-ex "$Machine" {
+				send "init 6\r"
+				expect -re "$prompt"
+				send "exit\r"
+				expect eof {
+					spawn /bin/bash
+					expect -re "$prompt"
+					send "echo \"$Machine Going Down\"\r"
+					expect -re "$prompt"
+					exit 0
+				}
+			} 
+			-re "$prompt" {
+				send "exit\r"
+				expect "closed"
+				expect eof {
+					spawn /bin/bash
+					expect -re "$prompt"
+					send "echo \"Wrong machine - Did not reboot\"\r"
+					expect -re "$prompt"
+					exit 1
+				}
+			}
+		}
+	} 
+	timeout {
+		exit 1
+	}
+	eof {
+		exit 1
+	}
+}
+ENDEXP
+	return $?
+}
+
+#Logs into blade and retrievs blade data
+#Return exit status and prints out all blade data
+#NEEDS - CreateExLogin function to create expect syntax
+#NEEDS - global variable exv for expect syntax
+#NEEDS - global variable prompt for expect prompt syntax
+#NEEDS - global variable pass for holding configured password
+GetSerial() { #Takes 1 or 2 parameters: IP and password optional
+	[ -n "$2" ] && Password=$2 || Password=${pass}
+	MACHINE=$1
+	lgin=`CreateExLogin root $MACHINE "$Password"`
+	lgin=`echo -e ${lgin}`
+/usr/bin/expect - << ENDEXP
+#exp_internal 1
+${lgin}
+expect {
+	-re "$prompt" {
+		send "ifconfig | grep -i -B 1 \"$MACHINE\" | \\
+			grep -o \"HWaddr.*\\\|eth\[0-9\].\"\r"
+		expect {
+			-ex "HWaddr " {
+				expect -re "$prompt"
+				send "hostname | sed -e s/.*/\"HN\\\AME &\"/\r"
+				expect "HNAME" 
+				expect -re "$prompt"
+				send "mount | grep -o -m 1 \"\[0-9\]:.*\/root\" | \\
+					sed -e s/'\\\/root'// | \\
+					grep -o \".*/\" | \\
+					sed -e s/'\\\/$'// -e s/'.*\\\/'// | \\
+					sed -e s/.*/\"NH\\\OS &\"/\r"
+				expect "NHOS" 
+				expect -re "$prompt"
+				send "ipmitool fru | grep \"Board Ser.*:\\\|Board Prod.*:\"\r"
+				expect {
+					-ex "Board Serial" {
+						expect -re "$prompt"
+						send "exit\r"
+						expect eof {
+							spawn /bin/bash
+							expect -re "$prompt"
+							exit 0
+						}
+					}
+					-ex "Unknown FRU header version" {
+						expect -re "$prompt"
+						send "exit\r"
+						expect eof {
+							spawn /bin/bash
+							expect -re "$prompt"
+							exit 0
+						}
+					}
+					eof {
+						spawn /bin/bash
+						expect -re "$prompt"
+						exit 0
+					}
+				}
+			} 
+			-re "$prompt" {
+				send "exit\r"
+				expect "closed"
+				expect eof {
+					spawn /bin/bash
+					expect -re "$prompt"
+					send "echo \"Wrong machine\"\r"
+					expect -re "$prompt"
+					exit 1
+				}
+			}
+		}
+	} ${exv}
+}
+ENDEXP
+	ret=$?
+	return ${ret}
+}
+
+#####Function For Shelf Manager to Reboot#####
+CliReboot() { #Takes Shelf Manager IP, command to exec, and password if required
+	if [ $# -gt 1 ] && [ $# -le 3 ];then
+		SHM="${1}"
+		BRD="${2}"
+		echo -e "\nRebooting through Shelf Manager"
+		declare -i rest=`ShmCon ${SHM} "clia boardreset ${BRD}" "${3}" | \
+			grep -c "Board ${BRD} reset, status returned 0"`
+		if [ ${rest} -eq 1 ]; then
+			return 0
+		else
+			return 2
+		fi
+	else
+		echo -e "\nCliReboot: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+}
+
+#####Function for checking DHCPD file validity#####
+ChkDhcpd () { #Parameters - 0=Create Backup 1=Restore Backup *=Do nothing
+	if [ $# -lt 1 ];then
+		echo "ChkDhcpd: Ivalid Parameters Passed - Exiting" && Exit 1
+	fi
+	service dhcpd configtest
+	if [ $? -eq 1 ];then #Check for valid dhcpd file
+		echo "Current dhcpd.conf file is invalid"
+		if [ -f ${bkdh} ] && [ ${1} == 1 ];then #Restore backup
+			echo -e "Restoring Backup ${dfle}"
+			\cp -f ${dfle} ${bddh}
+			\mv -f ${bkdh} ${dfle}
+		else
+			echo -e "Please fix ${dfle} then try again - Exiting"
+		fi
+		Exit 1
+	elif [ "${1}" == "0" ];then #Create backup before moddifying
+		\cp -af ${dfle} ${bkdh}
+	fi
+}
+
+#####Comment out MAC Addresses that already exist
+ComMac () { #Takes MAC Address as parameter
+	[ $# -ne 1 ] && echo "ComMac: Invalid Parameters Passed - Exiting" && Exit 1
+	cm_mac=${1}
+	IsValidMac "${1}"
+	[ $? -ne 0 ] && echo "ComMac: Invalid MAC \"${cm_mac}\" - Exiting" && Exit 1
+	grep -n -i "${cm_mac}" ${dfle} | grep -v "#.*hardware" | \
+		sed -e s/":.*"// | xargs -i sed -i '{} s/.*/#&/' ${dfle}
+}
+
+#####Remove Host Entry from dhcp file#####
+RemDhcpd () { #Takes host name as parameter
+	[ $# -ne 1 ] && echo "RemDhcpd: Invalid Parameters Passed - Exiting" && Exit 1
+	declare -i rd_chkcfg=`grep -c "^host ${1} {" ${dfle}`
+	if [ ${rd_chkcfg} -gt 0 ];then #Remove any current entries in dhcpd for hostname
+		rd_flne=`grep -m 1 -n "^host ${1} {" ${dfle} | \
+			sed -e s/":.*"//`
+		rd_elne=`grep -A 30 -n "^host ${1} {" ${dfle} | \
+			grep -m 1 "}" | sed -e s/"-.*"//`
+		if [ -z "${rd_flne}" ] || [ -z "${rd_elne}" ];then
+			echo -e "RemDhcpd: Error in removing \"${1}\" from ${dfle} - Exiting" && Exit 1
+		fi
+		sed -i ${rd_flne},${rd_elne}d ${dfle}
+	fi
+}
+
+#####Get dhcpd Entry location from dhcp file#####
+#Returns entry line number
+GetDhcpdLoc () { #Takes host name as parameter
+	[ $# -ne 1 ] && echo -e "\nGetDhcpdLoc: Invalid Parameters Passed - Exiting" && Exit 1
+	declare -i gd_chkcfg=`grep -c "^host ${1} {" ${dfle}`
+	declare -i gd_flne=""
+	if [ ${gd_chkcfg} -eq 0 ];then
+		gd_typ=`echo "${1}" | sed -e s/[0-9]//g`
+		declare -i gd_tot=`grep -c "^host ${gd_typ}[0-9]* {" ${dfle}`
+		declare -i gd_emax=`grep -o "^host ${gd_typ}[0-9].* {" ${dfle} \
+			| grep -o [0-9].* | sed -e s/" {.*"// | sort -g | tail -1`
+		declare -i gd_hnum=`echo "${1}" | grep -o [0-9].*`
+		if [ -n "${gd_emax}" ] && [ ${gd_hnum} -lt ${gd_emax} ];then
+			declare -i gd_z=${gd_hnum}
+			while [ ${gd_z} -lt ${gd_emax} ];do
+				gd_z=${gd_z}+1
+				declare -i gd_tst=`grep -m 1 -n "^host ${gd_typ}${gd_z} {" ${dfle} | \
+					sed -e s/":.*"//`
+				if [ ${gd_tst} -gt 0 ];then
+					gd_flne=${gd_tst}
+					break
+				fi
+			done
+		else
+			gd_llne=`grep "^host ${gd_typ}" ${dfle} | tail -1`
+			if [ -n "${gd_llne}" ];then
+				gd_flne=`grep -A 30 -n "${gd_llne}" ${dfle} | \
+					grep -m 1 "}" | sed -e s/"-.*"//`
+				gd_flne=${gd_flne}+1
+			else
+				gd_flne=$(( `grep -n "." ${dfle} | tail -1 | sed -e s/":.*"//` + 1 ))
+			fi
+		fi
+	fi
+	if [ -z "${gd_flne}" ];then #Check that insert line is not empty
+		echo -e "\nGetDhcpdLoc: Insert line in ${dfle} not set - Exiting" && Exit 1
+	else
+		echo ${gd_flne}
+	fi
+}
+
+#####Add Entry to dhcp file#####
+SetDhcpd () { #Takes Hostname and Type (BLADE_CONF or NPU_CONF)
+	[ $# -ne 2 ] && echo -e "\nSetDhcpd: Invalid Parameters Passed - Exiting" && Exit 1
+	declare -i sd_leng=`wc -l ${dfle} | sed -e s/" .*"//`
+	declare -i sd_lnum=`GetDhcpdLoc ${1}`
+	[ ${sd_lnum} -gt ${sd_leng} ] && echo "" >> ${dfle}
+	declare -i sd_z=0
+	case ${2} in
+		"${BLADE_CONFlbl}" )
+			declare -i sd_bdtrysz=${#bdtry[@]}
+			while [ ${sd_z} -lt ${sd_bdtrysz} ];do	#Insert dhcpd lines
+				sed -i -e "${sd_lnum} i \\${bdtry[${sd_z}]}" ${dfle}
+				sd_z=${sd_z}+1
+				sd_lnum=${sd_lnum}+1
+			done
+		;;
+		"${NPU_CONFlbl}" )
+			declare -i sd_ndtrysz=${#ndtry[@]}
+			while [ ${sd_z} -lt ${sd_ndtrysz} ];do	#Insert dhcpd lines
+				sed -i -e "${sd_lnum} i \\${ndtry[${sd_z}]}" ${dfle}
+				sd_z=${sd_z}+1
+				sd_lnum=${sd_lnum}+1
+			done
+		;;
+		* )
+			echo -e "\nSetDhcpd: Invalid Type passed \"${2}\" - Exiting" && Exit 1
+		;;
+	esac
+}
+
+#####Create dhcp entry format#####
+CreateDhcp() { #Takes BLADE_CONF ID
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nCreateDhcp: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "CreateDhcp: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "CreateDhcp: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	cd_bid=""; cd_bmac=""; cd_nid=""; cd_ncnote=""; cd_nmac=""; cd_nim=""; cd_ntftp=""; cd_cnum="";
+	cd_ncid=""; cd_nfsrt=""; cd_nopts=""; cd_nip=""; cd_nuip=""; cd_hnme=""; cd_clip=""; cd_npnup="";
+	cd_ip=""; cd_bcnote=""; cd_host=""; cd_nhnme=""; cd_bilne=""; cd_nilne="";
+	ndtry=()
+	bdtry=()
+	bdindx=`GetIndex ${BLADE_CONFlbl} BID`
+	ncindx=`GetIndex ${BLADE_CONFlbl} NPCID`
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	hoindx=`GetIndex ${BLADE_CONFlbl} HOST`
+	bcnindx=`GetIndex ${BLADE_CONFlbl} NOTE`
+	bmcindx=`GetIndex ${BLADElbl} MAC`
+	btpindx=`GetIndex ${BLADElbl} TYP`
+	nindx=`GetIndex ${NPU_CONFlbl} NID`
+	cd_bid="${BLADE_CONF[${bdindx}]}"
+	cd_ncid="${BLADE_CONF[${ncindx}]}"
+	cd_ip="${BLADE_CONF[${ipindx}]}"
+	cd_host="${BLADE_CONF[${hoindx}]}"
+	cd_bcnote="${BLADE_CONF[${bcnindx}]}"
+	IsValidIP "${cd_ip}"
+	[ $? -ne 0 ] && echo -e "\nCreateDhcp: Bad Blade IP ${cd_ip} - Exiting" && Exit 1
+	DoesExist "${BLADEvars[0]}" "${BLADEnme}" "${cd_bid}"
+	if [ $? -ne 0 ];then
+		echo -e "\nCreateDhcp: ${messge} - Exiting" && Exit 1
+	else #Get blade mac
+		GetIt "${BLADElbl}" "${cd_bid}"
+		cd_bmac="${BLADE[${bmcindx}]}"
+		cd_btyp="${BLADE[${btpindx}]}"
+		bdtry[0]="host ${cd_host} { #${cd_bcnote}"
+		bdtry[1]="\tfixed-address ${cd_ip};"
+		bdtry[2]="\thardware ethernet ${cd_bmac};"
+		bdtry[3]="\toption host-name \"${cd_host}\";"
+		bdtry[4]="} #Created with script"
+		ComMac "${cd_bmac}"
+		RemDhcpd "${cd_host}"
+		SetDhcpd "${cd_host}" "${BLADE_CONFlbl}"
+	fi
+	if [ -n "${cd_ncid}" ];then
+		DoesExist "${NPU_CONFvars[0]}" "${NPU_CONFnme}" "${cd_ncid}"
+		if [ $? -ne 0 ];then
+			echo -e "\nCreateDhcp: ${messge} - Exiting" && Exit 1
+		else #Get NPU_CONF
+			nmcindx=`GetIndex ${NPUlbl} MAC`
+			nimindx=`GetIndex ${NPU_CONFlbl} NPUI`
+			ncnindx=`GetIndex ${NPU_CONFlbl} NOTE`
+			nitfindx=`GetIndex ${NPU_IMAGElbl} TFTP`
+			nirtindx=`GetIndex ${NPU_IMAGElbl} NFSROOT`
+			nioptindx=`GetIndex ${NPU_IMAGElbl} OPTS`
+			GetIt "${NPU_CONFlbl}" "${cd_ncid}"
+			cd_nid="${NPU_CONF[${nindx}]}"
+			cd_ncnote="${NPU_CONF[${ncnindx}]}"
+			DoesExist "${NPUvars[0]}" "${NPUnme}" "${cd_nid}"
+			if [ $? -ne 0 ];then
+				echo -e "\nCreateDhcp: ${messge} - Exiting" && Exit 1
+			else #Get NPU MAC
+				GetIt "${NPUlbl}" "${cd_nid}"
+				cd_nmac="${NPU[${nmcindx}]}"
+				cd_nim="${NPU_CONF[${nimindx}]}"
+				DoesExist "${NPU_IMAGEvars[0]}" "${NPU_IMAGEnme}" "${cd_nim}"
+				if [ $? -ne 0 ];then
+					echo -e "\nCreateDhcp: ${messge} - Exiting" && Exit 1
+				else #Get NPU Image data
+					GetIt "${NPU_IMAGElbl}" "${cd_nim}"
+					cd_ntftp="${NPU_IMAGE[${nitfindx}]}"
+					cd_nfsrt="${NPU_IMAGE[${nirtindx}]}"
+					cd_nopts="${NPU_IMAGE[${nioptindx}]}"
+					#Set NPU vars + 100
+					declare -i cd_cnum=`echo "${cd_ip}" | sed -e s/".*\."//`
+					[ ${cd_cnum} -gt 153 ] && echo -e"\nCreateDhcp: Blade IP \"${cd_ip}\" to high to assign NPU - Exiting" && Exit 1
+					cd_npnum=$((${cd_cnum}+100))
+					shnindx=`GetIndex ${SERVERlbl} HNME`
+					clipindx=`GetIndex ${SERVERlbl} CLIP`
+					cd_hnme=${SERVER[${shnindx}]}
+					cd_clip=${SERVER[${clipindx}]}
+					cd_nhnme="octeon${cd_npnum}"
+					ndtry[0]="host ${cd_nhnme} { #${cd_ncnote}"
+					ndtry[1]="\thardware ethernet ${cd_nmac};"
+					cd_nip=`echo "${cd_ip}" | grep -o ".*\."`
+					cd_nuip=`echo "${cd_nip}" | sed -e "s/.$//" | grep -o ".*\."`
+					if [ "${cd_btyp}" == "AT8050" ];then #Configure for AT8050
+						ndtry[2]="\tfixed-address ${cd_nuip}${cd_npnum}.${cd_npnum};"
+						ndtry[3]="\toption routers ${cd_nuip}${cd_npnum}.253;"
+					else #AT8020 - Non AT8050 Configuration
+						ndtry[2]="\tfixed-address ${cd_nip}${cd_npnum};"
+						ndtry[3]="#\toption routers ${cd_nuip}${cd_npnum}.253; #Only used for AT8050"
+					fi
+					declare -i cd_tst=$(echo ${cd_nfsrt} | \
+						egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+					if [ ${cd_tst} -eq 0 ];then
+						cd_nfsrt="${cd_clip}:${defaultdisk}${cd_nfsrt}"
+					fi
+					ndtry[4]="\toption root-path \"${cd_nfsrt}\";"
+					ndtry[5]="\toption octeon-boot-command \"${cd_ntftp};${cd_nopts} nfsroot=${cd_nfsrt}\";"
+					ndtry[6]="\toption host-name \"${cd_nhnme}\";"
+					ndtry[7]="\tserver-name \"${cd_hnme}\";"
+					ndtry[8]="} #Created with script"
+					ComMac "${cd_nmac}"
+					RemDhcpd "${cd_nhnme}"
+					SetDhcpd "${cd_nhnme}" "${NPU_CONFlbl}"
+				fi
+			fi
+		fi
+	fi
+}
+
+#####Set pxe entry variables#####
+SetPxe () { #Takes BLADE_CONF ID
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nSetPxe: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "SetPxe: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "SetPxe: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	pxtry=()
+	sp_nhos=""; sp_host=""; sp_eth=""; sp_tft=""; sp_nfs=""; sp_opt=""; sp_rds=""; sp_clip="";
+	nhindx=`GetIndex ${BLADE_CONFlbl} NHID`
+	hoindx=`GetIndex ${BLADE_CONFlbl} HOST`
+	ethindx=`GetIndex ${BLADE_CONFlbl} ETH`
+	tftindx=`GetIndex ${IMAGElbl} TFTP`
+	nfsindx=`GetIndex ${IMAGElbl} NFSROOT`
+	optindx=`GetIndex ${IMAGElbl} OPTS`
+	rdindx=`GetIndex ${IMAGElbl} RDSIZE`
+	clipindx=`GetIndex ${SERVERlbl} CLIP`
+	sp_clip=${SERVER[${clipindx}]}
+	sp_nhos="${BLADE_CONF[${nhindx}]}"
+	sp_host="${BLADE_CONF[${hoindx}]}"
+	sp_eth="${BLADE_CONF[${ethindx}]}"
+	DoesExist "${IMAGEvars[0]}" "${IMAGEnme}" "${sp_nhos}"
+	if [ $? -ne 0 ];then
+		echo -e "\nSetPxe: ${messge} - Exiting" && Exit 1
+	else #Get blade mac
+		GetIt "${IMAGElbl}" "${sp_nhos}"
+		sp_tft="${IMAGE[${tftindx}]}"
+		sp_nfs="${IMAGE[${nfsindx}]}"
+		sp_opt="${IMAGE[${optindx}]}"
+		sp_rds="${IMAGE[${rdindx}]}"
+		pxtry[0]="default ${sp_nhos}"
+		pxtry[1]="label ${sp_nhos}"
+		pxtry[2]="\tkernel ${sp_tft}/vmlinuz"		
+		declare -i sp_tst=$(echo ${sp_nfs} | \
+			egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+		if [ ${sp_tst} -eq 0 ];then
+			sp_nfs="${sp_clip}:${defaultdisk}${sp_nfs}"
+		fi
+		pxtry[3]="\tappend initrd=${sp_tft}/initrd.img root=/dev/ram0 init=disklessrc NFSROOT=${sp_nfs} ramdisk_size=${sp_rds} ETHERNET=eth${sp_eth} SNAPSHOT=${sp_host} ${sp_opt}"
+	fi
+}
+
+#####Create pxelinux.cfg C file#####
+CreateCfle () { #Takes BLADE_CONF ID
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nCreateCfle: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "\nCreateCfle: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "\nCreateCfle: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	cc_ip="${BLADE_CONF[${ipindx}]}"
+	IsValidIP "${cc_ip}"
+	[ $? -ne 0 ] && echo -e "\nCreateCfle: Bad Blade IP ${cc_ip} - Exiting" && Exit 1
+	pxef=`gethostip -x ${cc_ip}`
+	cfl="${defaulttftp}pxelinux.cfg/${pxef}"
+	SetPxe "${1}"
+	echo -e "${pxtry[0]}" > ${cfl}
+	declare -i cc_x=1
+	while [ ${cc_x} -lt ${#pxtry[@]} ];do
+		echo -e "${pxtry[${cc_x}]}" >> ${cfl}
+		cc_x=${cc_x}+1
+	done
+}
+
+#####Add entries to /etc/hosts if needed#####
+SetHosts () { #Takes BLADE_CONF ID
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nSetHosts: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "SetHosts: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "SetHosts: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	sh_ip=""; sh_host=""; sh_ncid=""; sh_npnum=""; sh_npho=""; sh_nip=""; sh_nuip=""; sh_nphoct="";
+	sh_nfs=""; sh_bchk=""; sh_nchk=""; sh_nuchk="";
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	hoindx=`GetIndex ${BLADE_CONFlbl} HOST`
+	ncindx=`GetIndex ${BLADE_CONFlbl} NPCID`
+	nfsindx=`GetIndex ${IMAGElbl} NFSROOT`
+	sh_ip="${BLADE_CONF[${ipindx}]}"
+	sh_host="${BLADE_CONF[${hoindx}]}"
+	sh_ncid="${BLADE_CONF[${ncindx}]}"
+	IsValidIP "${sh_ip}"
+	[ $? -ne 0 ] && echo -e "\nSetHosts: Bad Blade IP ${sh_ip} - Exiting" && Exit 1
+	GetIt "${IMAGElbl}"
+	if [ -n "${sh_ncid}" ];then
+		DoesExist "${NPU_CONFvars[0]}" "${NPU_CONFnme}" "${sh_ncid}"
+		if [ $? -ne 0 ];then
+			echo -e "\nSetHosts: ${messge} - Exiting" && Exit 1
+		else #Get NPU_CONF
+			declare -i sh_cnum=`echo "${sh_ip}" | sed -e s/".*\."//`
+			[ ${sh_cnum} -gt 153 ] && echo -e"\nSetHosts: Blade IP \"${sh_ip}\" to high to assign NPU - Exiting" && Exit 1
+			sh_npnum=$((${sh_cnum}+100))
+			sh_npho="octeon${sh_npnum}"
+			sh_nphoct="oct${sh_npnum}"
+			sh_nip=`echo "${sh_ip}" | grep -o ".*\."`
+			sh_nuip=`echo "${sh_nip}" | sed -e "s/.$//" | grep -o ".*\."`
+			sh_nip="${sh_nip}${sh_npnum}"
+			sh_nuip="${sh_nuip}${sh_npnum}.${sh_npnum}"
+		fi
+	fi
+	declare -i sh_sz=${#IMAGEs[@]}
+	IMAGEs[${sh_sz}]=/etc/hosts
+	declare -i sh_x=0
+	while [ ${sh_x} -lt ${#IMAGEs[@]} ];do
+		if [ ${sh_x} -ne ${sh_sz} ];then
+			GetIt "${IMAGElbl}" "${IMAGEs[${sh_x}]}"
+			sh_nfs="${IMAGE[${nfsindx}]}"
+			declare -i sh_tst=$(echo "${sh_nfs}" | \
+				egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+			if [ ${sh_tst} -eq 0 ];then
+				sh_nfs="${defaultdisk}${sh_nfs}"
+			else
+				sh_nfs=`echo -e "${sh_nfs}" | sed -e "s/.*\://"`
+			fi	
+			sh_nfs="${sh_nfs}/root/etc/hosts"
+		else
+			sh_nfs=${IMAGEs[${sh_x}]}
+		fi
+		if [ ! -e "${sh_nfs}" ];then
+			echo -e "\nSetHosts: File ${sh_nfs} - Not Found"
+		else
+			sh_bchk=`sed -n -e "/^${sh_ip}\t/p" ${sh_nfs}  | sed -n -e "/\t${sh_host}\t/p"`
+			if [ -z "${sh_bchk}" ];then
+				sed -i "/^${sh_ip}\t/d" ${sh_nfs}
+				sed -i "/\t${sh_host}\t/d" ${sh_nfs}
+				echo -e "${sh_ip}\t${sh_host}\t${sh_host}.nh.net" >> ${sh_nfs}
+				echo "Added ${sh_host} entry to ${sh_nfs}"
+			fi
+			if [ -n "${sh_npnum}" ];then
+				sh_nchk=`sed -n -e "/^${sh_nip}\t/p" ${sh_nfs}  | sed -n -e "/\t${sh_npho}\t/p"`
+				if [ -z "${sh_nchk}" ];then
+					sed -i "/^${sh_nip}\t/d" ${sh_nfs}
+					sed -i "/\t${sh_npho}\t/d" ${sh_nfs}
+					echo -e "${sh_nip}\t${sh_npho}\t${sh_npho}.nh.net" >> ${sh_nfs}
+					echo "Added ${sh_npho} entry to ${sh_nfs}"
+				fi
+				sh_nuchk=`sed -n -e "/^${sh_nuip}\t/p" ${sh_nfs}  | sed -n -e "/\t${sh_nphoct}\t/p"`
+				if [ -z "${sh_nuchk}" ];then
+					sed -i "/^${sh_nuip}\t/d" ${sh_nfs}
+					sed -i "/\t${sh_nphoct}\t/d" ${sh_nfs}
+					echo -e "${sh_nuip}\t${sh_nphoct}\t${sh_nphoct}.nh.net" >> ${sh_nfs}
+					echo "Added ${sh_nphoct} entry to ${sh_nfs}"
+				fi
+			fi
+		fi
+		sh_x=${sh_x}+1
+	done
+}
+
+#####Add entries to iptables#####
+SetTables () { #Takes BLADE_CONF ID
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nSetTables: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "SetTables: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "SetTables: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	st_ip=""; st_achk=""; st_cnum=""; st_sip=""; st_spt=""; st_vpt="";
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	st_ip="${BLADE_CONF[${ipindx}]}"
+	IsValidIP "${st_ip}"
+	[ $? -ne 0 ] && echo -e "\nSetTables: Bad Blade IP ${st_ip} - Exiting" && Exit 1
+	st_achk=`sed -n -e "/ ${st_ip}[ ,:]/p" ${iptfle}`
+	if [ -z "${st_achk}" ];then
+		declare -i st_cnum=`echo "${st_ip}" | sed -e s/".*\."//`
+		\cp -af ${iptfle} ${bkipt}
+		modprobe iptable_nat
+		#Get server IP
+		st_sip=`/sbin/ifconfig eth0 | grep 'inet addr:' | \
+			cut -d: -f2 | awk '{ print $1}'`
+		#Port for ssh 9000 plus ip
+		st_spt=$(( 9000 + ${st_cnum} ))
+		#port for vnc 5900 plus ip
+		st_vpt=$(( 5900 + ${st_cnum} ))
+		iptables -t nat -A PREROUTING -d ${st_sip} -i eth0 -p tcp -m tcp --dport ${vpt} -j DNAT --to-destination ${st_ip}:5901
+		iptables -t nat -A PREROUTING -d ${st_sip} -i eth0 -p tcp -m tcp --dport ${spt} -j DNAT --to-destination ${st_ip}:22
+		iptables -A FORWARD -d ${st_ip} -i eth0 -p tcp -m tcp --dport ${st_vpt} -j ACCEPT
+		iptables -A FORWARD -d ${st_ip} -i eth0 -p tcp -m tcp --dport ${st_spt} -j ACCEPT
+		service iptables save
+		#service iptables restart
+		echo "Added ${st_ip} entry to ${iptfle}"
+	fi
+	echo "Entries already exist in iptables"
+}
+
+#####Get current GPU configured boot IP#####
+GetIp () { #Takes BLADE_CONF Id as parameter
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nGetIp: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "GetIp: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "GetIp: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	gi_mac=""; gi_curip=""; gi_bid="";
+	mcindx=`GetIndex ${BLADElbl} MAC`
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	bdindx=`GetIndex ${BLADE_CONFlbl} BID`
+	gi_bid="${BLADE_CONF[${bdindx}]}"
+	gi_ip="${BLADE_CONF[${ipindx}]}"
+	IsValidIP "${gi_ip}"
+	[ $? -ne 0 ] && echo -e "\nGetIp: Bad Blade IP ${gi_ip} - Exiting" && Exit 1
+	DoesExist "${BLADEvars[0]}" "${BLADEnme}" "${gi_bid}"
+	if [ $? -ne 0 ];then
+		echo -e "\nGetIp: ${messge} - Exiting" && Exit 1
+	else #Get blade mac
+		GetIt "${BLADElbl}" "${gi_bid}"
+		gi_mac="${BLADE[${mcindx}]}"
+		IsValidMac "${gi_mac}"
+		[ $? -ne 0 ] && echo -e "\nGetIp: Bad Blade MAC ${gi_mac} - Exiting" && Exit 1
+		gi_curip=$(awk 'BEGIN { RS =u "host " ; FS = "\n" ;} \
+			{ if (/'${gi_mac}'/) { x = 0 ; while ( x < NF ) \
+			{ ++x ; if ($x !~ /^[\t, ]*#.*/ && $x ~ /'${gi_mac}'/) \
+			{ y = 0 ; while ( y < NF ) { ++y ; \
+			if ($y !~ /^[\t, ]*#.*/ && $y ~ /fixed-address/) \
+			{ print $y } } } } } }' $dfle | \
+			sed -e s/".*fixed-address "// -e s/";.*"//)
+		if [ -z "${gi_curip}" ];then
+			echo ${gi_ip}
+		else
+			echo ${gi_curip}
+		fi
+	fi
+}
+
+#####Reboot GPU#####
+RebootIt () { #Takes BLADE_CONF id and optional Ip to try
+	if [ $# -eq 1 ] || [ $# -eq 2 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nRebootIt: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo -e "\nRebootIt: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo -e "\nRebootIt: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	sshreboot=false
+	cliboot=false
+	rebip=""; ri_pword=""; ri_ip=""; ri_dpword=""; ri_mac=""; ri_bs=""; ri_shm=""; ri_ship=""; ri_spwd="";
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	ri_ip="${BLADE_CONF[${ipindx}]}"
+	if [ $# -eq 2 ];then
+		IsValidIP "${2}"
+		[ $? -ne 0 ] && echo -e "\nRebootIt: Bad Blade IP \"${2}\" Passed - Exiting" && Exit 1
+		TestIp "${2}"
+		if [ $? -eq 0 ];then
+			sshreboot=true
+			rebip=${2}
+		fi
+	else
+		IsValidIP "${ri_ip}"
+		[ $? -ne 0 ] && echo -e "\nRebootIt: Bad Blade IP Configured \"${ri_ip}\" - Exiting" && Exit 1
+		TestIp "${ri_ip}"
+		if [ $? -eq 0 ];then
+			sshreboot=true
+			rebip=${ri_ip}
+		fi
+	fi
+	#####Restart blade with init 6#####
+	if [ "${sshreboot}" == "true" ];then
+		bdindx=`GetIndex ${BLADE_CONFlbl} BID`
+		pwindx=`GetIndex ${BLADE_CONFlbl} PWORD`
+		mcindx=`GetIndex ${BLADElbl} MAC`
+		ri_pword="${BLADE_CONF[${pwindx}]}"
+		ri_bid="${BLADE_CONF[${bdindx}]}"
+		DoesExist "${BLADEvars[0]}" "${BLADEnme}" "${ri_bid}"
+		if [ $? -ne 0 ];then
+			echo -e "\nRebootIt: ${messge} - Exiting" && Exit 1
+		else #Get blade mac
+			GetIt "${BLADElbl}" "${ri_bid}"
+			ri_mac="${BLADE[${mcindx}]}"
+			IsValidMac "${ri_mac}"
+			[ $? -ne 0 ] && echo -e "\nRebootIt: Bad Blade MAC ${ri_mac} - Exiting" && Exit 1
+		fi
+		ri_dpword=opticall
+		if [ "${re_ip}" == "${rebip}" ];then
+			if [ -n "${ri_pword}" ];then
+				ri_dpword="${ri_pword}"
+			fi
+		fi
+		Rebootssh "root" "${rebip}" "${ri_mac}" "${ri_dpword}"
+		if [ $? -eq 0 ];then
+			echo -e "\nBlade \"${rebip}\" is rebooting" && sleep 2
+		else
+			echo -e "\nFailed to reboot blade \"${rebip}\" using init 6"
+			cliboot=true
+		fi
+	else
+		echo -e "\nCould not find valid IP to reboot through ssh"
+		cliboot=true
+	fi
+
+	#####Reboot blade through shelf manager#####
+	if [ "${cliboot}" == "true" ];then
+		bdindx=`GetIndex ${BLADE_CONFlbl} BID`
+		ri_bid="${BLADE_CONF[${bdindx}]}"
+		DoesExist "${BLADEvars[0]}" "${BLADEnme}" "${ri_bid}"
+		if [ $? -ne 0 ];then
+			echo -e "\nRebootIt: ${messge} - Exiting" && Exit 1
+		else #Get blade Shelf
+			GetIt "${BLADElbl}" "${ri_bid}"
+			shmindx=`GetIndex ${BLADElbl} SHM`
+			bsindx=`GetIndex ${BLADElbl} BSLOT`
+			ri_bs="${BLADE[${bsindx}]}"
+			ri_shm="${BLADE[${shmindx}]}"
+		fi
+		if [ -n "${ri_bs}" ] && [ -n "${ri_shm}" ];then
+			DoesExist "${SHELFvars[0]}" "${SHELFnme}" "${ri_shm}"
+			if [ $? -ne 0 ];then
+				echo -e "\nRebootIt: ${messge} - Exiting" && Exit 1
+			else #Get blade Shelf
+				GetIt "${SHELFlbl}" "${ri_shm}"
+				shipindx=`GetIndex ${SHELFlbl} IP`
+				shpwdindx=`GetIndex ${SHELFlbl} PWORD`
+				ri_ship="${SHELF[${shipindx}]}"
+				ri_spwd="${SHELF[${shpwdindx}]}"
+			fi
+			CliReboot "${ri_ship}" "${ri_bs}" "${ri_spwd}"
+			if [ $? -eq 0 ];then
+				echo -e "\nBlade \"${1}\" is rebooting" && sleep 2
+			else
+				echo -e "\nFailed to reboot Blade \"${1}\" using Shelf Manager \"${ri_shm}\""
+				echo -e "Reboot Board manually for changes to take affect" && sleep 2
+			fi
+		else
+			echo -e "\nParamaters are not available to boot \"${1}\" from the Shelf Manager"
+			echo -e "Manually Reboot board for changes to take affect" && sleep 2
+		fi
+	fi
+}
+
+#Calls SetExports to Set exports file for NPU_IMAGE and IMAGE
+CreateExports() { #Takes BLADE_CONF ID as Parameter
+	if [ $# -eq 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nCreateExports: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "CreateExports: Incorrect Type passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "CreateExports: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	ce_nhos=""; ce_nfs=""; ce_clip=""; ce_ncid=""; ce_nim=""; ce_nfsrt=""; ce_clip="";
+	nhindx=`GetIndex ${BLADE_CONFlbl} NHID`
+	nfsindx=`GetIndex ${IMAGElbl} NFSROOT`
+	clipindx=`GetIndex ${SERVERlbl} CLIP`
+	ncindx=`GetIndex ${BLADE_CONFlbl} NPCID`
+	ce_ncid="${BLADE_CONF[${ncindx}]}"
+	ce_clip=${SERVER[${clipindx}]}
+	ce_nhos="${BLADE_CONF[${nhindx}]}"
+	DoesExist "${IMAGEvars[0]}" "${IMAGEnme}" "${ce_nhos}"
+	if [ $? -ne 0 ];then
+		echo -e "\nCreateExports: ${messge} - Exiting" && Exit 1
+	else #Get Image NFS
+		GetIt "${IMAGElbl}" "${ce_nhos}"
+		ce_nfs="${IMAGE[${nfsindx}]}"
+		declare -i ce_tst=$(echo ${ce_nfs} | \
+			egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+		if [ ${ce_tst} -eq 0 ];then
+			ce_nfs="${defaultdisk}${ce_nfs}"
+		else
+			ce_nfs=`echo -e "${ce_nfs}" | sed -e "s/.*://"`
+		fi
+		SetExports "${IMAGElbl}" "${ce_nfs}" "${ce_nhos}"
+	fi
+	if [ -n "${ce_ncid}" ];then
+		DoesExist "${NPU_CONFvars[0]}" "${NPU_CONFnme}" "${ce_ncid}"
+		if [ $? -ne 0 ];then
+			echo -e "\nCreateExports: ${messge} - Exiting" && Exit 1
+		else #Get NPU_CONF
+			nimindx=`GetIndex ${NPU_CONFlbl} NPUI`
+			nirtindx=`GetIndex ${NPU_IMAGElbl} NFSROOT`
+			GetIt "${NPU_CONFlbl}" "${ce_ncid}"
+			ce_nim="${NPU_CONF[${nimindx}]}"
+			DoesExist "${NPU_IMAGEvars[0]}" "${NPU_IMAGEnme}" "${ce_nim}"
+			if [ $? -ne 0 ];then
+				echo -e "\nCreateExports: ${messge} - Exiting" && Exit 1
+			else #Get NPU Image data
+				GetIt "${NPU_IMAGElbl}" "${ce_nim}"
+				ce_nfsrt="${NPU_IMAGE[${nirtindx}]}"				
+				clipindx=`GetIndex ${SERVERlbl} CLIP`
+				ce_clip="${SERVER[${clipindx}]}"
+				declare -i ce_tst=$(echo ${ce_nfsrt} | \
+					egrep -c "^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:")
+				if [ ${ce_tst} -eq 0 ];then
+					ce_nfsrt="${defaultdisk}${ce_nfsrt}"
+				else
+					ce_nfsrt=`echo -e "${ce_nfsrt}" | sed -e "s/.*://"`
+				fi
+				SetExports "${NPU_IMAGElbl}" "${ce_nfsrt}" "${ce_nim}"
+			fi
+		fi
+	fi
+}
+
+#Auto Configures Blade
+ConfigureBlade() { #Takes BLADE_CONF ID as Parameter optional second paramter "REBOOT" for no prompt reboot or "NOPROMPT"
+	if [ $# -ge 1 ];then
+		DoesExist "${BLADE_CONFvars[0]}" "${BLADE_CONFnme}" "${1}"
+		if [ $? -ne 0 ];then
+			echo -e "\nConfigureBlade: ${messge} - Exiting" && Exit 1
+		fi
+		GetIt "${BLADE_CONFlbl}" "${1}"
+		[ $? -ne 0 ] && echo "\nConfigureBlade: Incorrect ID passed \"${1}\" - Exiting" && Exit 1
+	else
+		echo "\nConfigureBlade: Incorrect parameters passed - Exiting" && Exit 1
+	fi
+	#Get Current Blade Ip
+	cb_curbip=`GetIp "${1}"`
+	##Set exports File
+	CreateExports ${1}
+	#Set DHCPD File
+	\cp -af ${dfle} ${cmpdfle}
+	ChkDhcpd 0
+	CreateDhcp ${1}
+	ChkDhcpd 1
+	diff -q ${dfle} ${cmpdfle} > /dev/null
+	if [ $? -eq 1 ];then
+		/sbin/service dhcpd reload
+	else
+		echo -e "No Change to DCHPD Configuration"
+	fi
+	\rm -f ${cmpdfle}
+	#Set C File
+	SetPxe ${1}
+	CreateCfle ${1}
+	#Set Hosts files for all images and server
+	SetHosts ${1}
+	#Set IpTables
+	SetTables ${1}
+	if [ "${2}" != "REBOOT" ] && [ "${2}" != "NOPROMPT" ];then
+		echo -e "\nBlade Configuration Complete"
+		echo -e "Hit Enter to Reboot the Blade or anything to skip Reboot:"
+		Read rboot
+		[ -n "${rboot}" ] && return
+	elif [ "${2}" == "NOPROMPT" ];then
+		echo -e "\nBlade must be reset for any Blade changes to be applied" && return
+	fi
+	#Reboot Blade
+	RebootIt "${1}" "${cb_curbip}"
+}
+
+#Used to Set the login password "pass" on remote systems.
+#Will prompt for password if the correct password isnt supplied
+#NEEDS - CheckPass function to check the password
+#NEEDS - global array passes() for holding known passwords
+#NEEDS - global variable pass for holding configured password
+SetPass() { #Takes IP and password as parameters
+	[ -n "${2}" ] && pass=$2 || pass=""
+	printf "\nVerifying ${1} password..."
+	#echo -e "\nVerifying $1 password..."
+	bla=`CheckPass ${1} "${pass}"`
+	chk=$? && [ ${chk} -eq 0 ] && printf "DONE\n"
+	while [ "${chk}" != "0" ];do
+		if [ "${chk}" == "2" ];then
+			echo -e "\nIncorrect password \"${pass}\""
+			echo "What is the password for ${1}?"
+			echo -e "\tType the password or exit to quit"
+			Read pass
+			if [ "${pass}" != "exit" ];then
+				bla=`CheckPass $1 "${pass}"`
+				chk=$?
+			else
+				echo "Unable to log into ${1}?"
+				#exit 0
+				chk=0
+			fi
+		elif [ "${chk}" == "1" ];then
+			echo "Unable to log into ${1}"
+			#exit 0
+			chk=0
+		elif [ "${chk}" == "3" ];then
+			echo -e "No Password configured for ${1}\n"
+			pass="Not Configured" 
+			chk=0
+		fi
+	done
+	declare -i sz=${#passes[@]}
+	passes[${sz}]="IP=${1} PASSWORD=${pass}"
+}
+
+#Sets pass to password of the IP given
+#NEEDS - SetPass function to set the password
+#NEEDS - global array passes() to store passwords
+GetPass() { #Takes IP, and password as optional parameter
+	ind=""
+	declare -i x=0
+	declare -i sz=${#passes[@]}
+	while [ ${x} -lt ${sz} ];do
+		declare -i tst=`echo ${passes[${x}]} | grep -c "IP=${1}"`
+		if [ ${tst} -gt 0 ];then
+			ind=${x}
+			break
+		fi
+		x=$x+1
+	done
+	if [ -n "${ind}" ];then
+		pass=`echo ${passes[${ind}]} | \
+			grep -o "PASSWORD=.*" | sed -e s/"PASSWORD="//`
+	else
+		SetPass ${1} "${2}"
+	fi
+}
+
+#Searches Shelf slot by slot for blade with given serial number
+#Sets slot variable so that data can be retrieved
+#Should set pass before running
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - global array slots() to know what slots to search
+#NEEDS - global variable slot to set
+#NEEDS - global variable pass for holding configured password
+GetSlot() { #Takes serial Number and shelf manager IP as parameters
+	slot=""
+	for slt in "${slots[@]}";do
+		sleep 1
+		printf ${slt}
+		fru=`ShmCon $2 "clia fruinfo board ${slt}" "${pass}"`
+		declare -i tmp=`echo "${fru}" | grep -c "${1}"`
+		if [ ${tmp} -gt 0 ];then
+			slot=${slt}
+			break
+		fi
+	done
+}
+
+#Create Matrix of shelfs, slots, and serial numbers to quicken searches
+#Sets shmatrix with list of shelfs, slots and serial numbers
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - global array shelips() to use all shelfs found
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global array slots() to know what slots to search
+#NEEDS - global array shmatrix() to store the matrix
+SetShelfMatrix() { #Sets Matrix of Chassis and Blade Serial Numbers
+	declare -i x=0
+	echo "Setting Shelf Matrices"
+	for shm in "${shelips[@]}";do
+		GetPass ${shm}
+		SetSlots ${shm} "${pass}"
+		PrintDots "Creating Shelf Matrix for ${shm} at Slot " &
+		jb=$!
+		for slt in "${slots[@]}";do
+			sleep 1
+			printf ${slt}
+			txt=`ShmCon ${shm} "clia fruinfo board ${slt}" "${pass}"`
+			sn=`echo -e "${txt}" | grep -m 1 "Board Serial" | \
+				sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+			if [ -n "${sn}" ];then
+				shmatrix[${x}]="SN=${sn} SHELF=${shm} SLOT=${slt}"
+				x=$x+1
+			fi
+		done
+		KillIt ${jb}
+		printf "DONE\n"
+	done
+}
+
+#Searches shmatrix for serial number provided
+#Returns index of shmatrix that contains the given serial number
+#NEEDS - SetShelfMatrix function to set shmatrix
+#NEEDS - global array shmatrix() to store the matrix
+SearchMatrix() { #Takes SN to search for as only parameter
+	declare -i x=0
+	declare -i sz=${#shmatrix[@]}
+	while [ ${x} -lt ${sz} ];do
+		declare -i tst=`echo ${shmatrix[${x}]} | grep -c "${1}"`
+		if [ ${tst} -gt 0 ];then
+			echo "${x}"
+			break
+		fi
+		x=$x+1
+	done
+}
+
+#Retrieves fru info and slot data for given slot from shelf manager
+#Returns formatted slot info
+#Providing full as 3rd paramater causes more data to be displayed
+#Should set pass before running
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - global variable pass for holding configured password
+GetSlotInfo() { #Takes shelf manager IP, shelf slot, and optional full as parameters
+	[ "$3" == "full" ] && full="true" || full="false"
+	printf "\nShelf ${shm} - Slot $2 "
+	declare -a frus=(`ShmCon $1 "clia board $2" "${pass}" | \
+		grep "FRU #" | \
+		sed -e s/": FRU #"// -e s/" (.*"// | \
+		grep -o ".*[0-9]" | \
+		xargs -i echo -e '"{}"'`)
+	echo -e "`echo ${frus[0]} | \
+		egrep -o -i \"^[a-z0-9]+\" | 
+		sed -e s/\".*\"/\"- FRU &\"/`"
+	for vfru in "${frus[@]}";do
+		if [ "${full}" == "true" ];then
+			txti=`ShmCon $1 "clia fruinfo ${vfru}" "${pass}" | \
+				grep "Board Product Name\|Board Serial\|Board Manufacturer\|Board Part"`
+		fi
+		txtf=`ShmCon $1 "clia fru ${vfru}" "${pass}" | \
+			grep "Hot Swap State\|Device ID String"`
+		sn=`echo -e "$txti" | grep -m 1 "Board Serial" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		prod=`echo -e "$txti" | grep -m 1 "Board Product" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		manf=`echo -e "$txti" | grep -m 1 "Board Manufacturer" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		prt=`echo -e "$txti" | grep -m 1 "Board Part" | \
+			sed -e s/".*= "// | egrep -o -i ".*[a-z0-9]"`
+		ste=`echo -e "$txtf" | grep -m 1 "Hot Swap State" | 
+			sed -e s/").*"// -e s/".*("//`
+		dev=`echo -e "$txtf" | grep -m 1 "Device ID String" | \
+			sed -e s/".*: \""// | egrep -o -i ".*[a-z0-9]"`
+		
+		echo -e "\tSlot $2 - FRU ${vfru}"
+		[ -n "$manf" ] && echo -e "\t Manufacturer\t\t= ${manf}"
+		[ -n "$prod" ] && echo -e "\t Product\t\t= ${prod}"
+		[ -n "$sn" ] && echo -e "\t Serial Number\t\t= ${sn}"
+		[ -n "$prt" ] && echo -e "\t Part Number\t\t= ${prt}"
+		[ -n "$dev" ] && echo -e "\t Device ID\t\t= ${dev}"
+		[ -n "$ste" ] && echo -e "\t Current State\t\t= ${ste}"
+	done
+	if [ ${#frus[0]} -eq 0 ];then
+		txta=`ShmCon $1 "clia board $2" "${pass}" | grep "absent"`
+		abs=`echo -e "$txta" | grep -m 1 "absent" | \
+			egrep -o -i "[a-z0-9].*[a-z0-9]"`
+		[ -n "$abs" ] && echo -e "\t${abs}"
+	fi
+}
+
+#Gets all slot info for provided shlelf IP using GetSlotInfo
+#Providing full as 2nd paramater causes more data to be displayed
+#NEEDS - SetSlots function to get number of slots in chassis
+#NEEDS - GetSlotInfo function to get specific data on slots
+#NEEDS - global array slots to know what slots to search
+GetShelfInfo() { #Takes shelf manager IP as parameter and full as optional parameter
+	GetPass ${1}
+	echo -e "\nShelf $1 Slot Info"
+	SetSlots ${1} "${pass}"
+	for slt in "${slots[@]}";do
+		GetSlotInfo ${1} ${slt} ${2}
+	done
+}
+
+#Gets shelf info for provided shlelf IP
+#Returns formatted shelf info
+#NEEDS - ShmCon function to get data from shelf
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global array kshelfvars() for shelf parameters names
+#NEEDS - global array slots() to know what slots to search
+GetShmData() { #Takes shelf manager IP as only parameter
+	GetPass $1
+	pas=${pass}
+	PrintDots "\nRetrieving Shelf info from $1 " &
+	jb=$!
+	SetSlots $1 "${pas}"
+	slt=${#slots[@]}
+	gmac=`ShmCon $1 "ifconfig" "${pas}" | \
+		grep -i -B 1 "$1"`
+	txt=`ShmCon $1 "version" "${pas}" | \
+		grep "Firmware Image\|Image Name\|Manager ver."`
+	mac=`echo "$gmac" | grep -m 1 "HWaddr .*" | \
+		sed -e s/".*HWaddr "//g | egrep -i -o ".*[a-z0-9]"`
+	fiv=`echo -e "$txt" | \
+		grep "Firmware Image" | \
+		sed -e s/".*sion "// | \
+		egrep -i -o ".*[a-z0-9]"`
+	if [ ! -n "${fiv}" ];then
+		fiv=`echo -e "$txt" | \
+			grep -m 1 "Image Name" | \
+			sed -e s/".*:"// | \
+			egrep -i -o "[a-z0-9].*[a-z0-9]"`
+	fi
+	sfw=`echo -e "$txt" | \
+		grep "Manager ver." | \
+		sed -e s/".*ver\. "// | \
+		egrep -i -o ".*[a-z0-9]"`
+	KillIt $jb
+	printf "DONE\n"
+	unset SHELF
+	ipindx=`GetIndex ${SHELFlbl} IP`
+	[ -n "${1}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${ipindx}]}= ${1}" && SHELF[${ipindx}]=${1}
+	slindx=`GetIndex ${SHELFlbl} SLTS`
+	[ -n "${slt}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${slindx}]}= ${slt}" && SHELF[${slindx}]=${slt}
+	mcindx=`GetIndex ${SHELFlbl} MAC`
+	[ -n "${mac}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${mcindx}]}= ${mac}" && SHELF[${mcindx}]=${mac}
+	pindx=`GetIndex ${SHELFlbl} PWORD`
+	[ -n "${1}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${pindx}]}= \"${pas}\"" && SHELF[${pindx}]=${pas}
+	ivindx=`GetIndex ${SHELFlbl} IMV`
+	[ -n "${fiv}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${ivindx}]}= ${fiv}" && SHELF[${ivindx}]=${fiv}
+	svindx=`GetIndex ${SHELFlbl} SHV`
+	[ -n "${sfw}" ] && echo -e "\t${SHELFnme}\t${SHELFdesc[${svindx}]}= ${sfw}" && SHELF[${svindx}]=${sfw}
+}
+
+#Gets blade info for provided IP
+#Returns formatted blade info
+#NEEDS - GetSerial function to get serial number for blade
+#NEEDS - SetSlots function to set the number of slots in the chassis
+#NEEDS - PrintDots function to print out dots when running
+#NEEDS - KillIt function to kill PrintDots
+#NEEDS - SearchMatrix function to search shmatrix for SN if set
+#NEEDS - GetSlot function to search shelfs for slot info
+#NEEDS - GetSlotinso function to get detailed info for slot
+#NEEDS - global array kbladevars() for blade parameters names
+#NEEDS - global array shmatrix() for already known configurations
+#NEEDS - global array shelips() for shelf managers found
+#NEEDS - global array slots() to know what slots to search
+#NEEDS - global variable slot to store slot found
+#NEEDS - global variable pass for holding configured password
+#NEEDS - global variable defaultp for default configured password
+GetBladeData() { #Takes Blade IP as only parameter
+	GetPass ${1} "${defaultp}"
+	pss=${pass}
+	PrintDots "\nRetrieving GPU info from ${1} " &
+	jb=$!
+	binfo=""
+	nodat=""
+	txt=`GetSerial ${1} "${pss}" | grep "Serial\|Product\|Unknown\|HWaddr\|eth\|NHOS\|HNAME"`
+	declare -i unk=`echo "${txt}" | grep -c "Unknown"`
+	sn=`echo -e "${txt}" | grep -m 1 "Board Serial" | egrep -o "[0-9]+"`
+	prod=`echo -e "${txt}" | grep -m 1 "Board Product" | \
+		sed -e s/".*: "// -e s/" .*"// | egrep -i -o ".*[a-z0-9]"`
+	eth=`echo "${txt}" | grep -m 1 "eth[0-9]" | egrep -o "[0-9]+"`
+	mac=`echo "${txt}" | grep -m 1 "HWaddr .*" | \
+		sed -e s/"HWaddr "//g | egrep -i -o ".*[a-z0-9]"`
+	img=`echo "${txt}" | grep -m 1 "NHOS" | \
+		sed -e s/"NHOS "//g | egrep -i -o ".*[a-z0-9]"`
+	hnm=`echo "${txt}" | grep -m 1 "HNAME" | \
+		sed -e s/"HNAME "//g | egrep -i -o ".*[a-z0-9]"`
+	KillIt ${jb}
+	printf "DONE\n"
+	shelman=""
+	slot=""
+	if [ -n "${sn}" ];then
+		if [ ${#shmatrix[@]} -gt 0 ];then
+			ind=`SearchMatrix ${sn}`
+			if [ -n "${ind}" ];then
+				shelman=`echo ${shmatrix[${ind}]} | \
+					grep -o "SHELF=.* " | sed -e s/"SHELF="// -e s/" "//`
+				slot=`echo ${shmatrix[${ind}]} | \
+					grep -o "SLOT=.*" | sed -e s/"SLOT="//`
+			fi
+		else
+			for shm in "${shelips[@]}";do
+				GetPass ${shm}
+				SetSlots ${shm} "${pass}"
+				PrintDots "Checking for GPU ${1} in shelf ${shm} at Slot " &
+				jb=$!
+				GetSlot ${sn} ${shm}
+				KillIt ${jb}
+				if [ -n "${slot}" ];then
+					printf "FOUND\n"
+					shelman=${shm}
+					break 1
+				fi
+				printf "NOT FOUND\n"
+			done
+		fi
+		if [ -n "${slot}" ];then
+			GetPass ${shelman}
+			PrintDots "Retrieving Fru info from shelf" &
+			jb=$!
+			binfo=`GetSlotInfo ${shelman} ${slot} full`
+			KillIt ${jb}
+			printf "DONE\n"
+		else
+			echo "Blade not found in shelf"
+		fi
+	elif [ "${eth}" == "0" ];then
+		[ ! -n "${prod}" ] && prod="CP6010"
+	else
+		echo "No GPU info retrieved for ${1}"
+		nodat=true
+	fi
+	unset BLADE
+	unset BLADE_CONF
+	ipindx=`GetIndex ${BLADE_CONFlbl} IP`
+	[ ! -n "${nodat}" ] && echo -e "\n${1} Data" && BLADE_CONF[${ipindx}]=${1}
+	if [ -n "${img}" ];then
+		imindx=`GetIndex ${BLADE_CONFlbl} NHID`
+		echo -e "\t${BLADEnme}\t${BLADE_CONFdesc[${imindx}]}= ${img}"
+		SearchData "${IMAGElbl}" "=${img}/" "NFSROOT"
+		if [ $? -eq 0 ];then
+			img="${searchar[0]}"
+		else
+			img=""
+		fi
+		BLADE_CONF[${imindx}]=${img}
+	fi
+	hoindx=`GetIndex ${BLADE_CONFlbl} HOST`
+	[ -n "${hnm}" ] && echo -e "\t${BLADEnme}\t${BLADE_CONFdesc[${hoindx}]}= ${hnm}" && BLADE_CONF[${hoindx}]=${hnm}
+	eindx=`GetIndex ${BLADE_CONFlbl} ETH`
+	[ -n "${eth}" ] && echo -e "\t${BLADEnme}\t${BLADE_CONFdesc[${eindx}]}= ${eth}" && BLADE_CONF[${eindx}]=${eth}
+	mcindx=`GetIndex ${BLADElbl} MAC`
+	[ -n "${mac}" ] && echo -e "\t${BLADEnme}\t${BLADEdesc[${mcindx}]}= ${mac}" && BLADE[${mcindx}]=${mac}
+	tyindx=`GetIndex ${BLADElbl} TYP`
+	[ -n "${prod}" ] && echo -e "\t${BLADEnme}\t${BLADEdesc[${tyindx}]}= ${prod}" && BLADE[${tyindx}]=${prod}
+	srindx=`GetIndex ${BLADElbl} SER`
+	[ -n "${sn}" ] && echo -e "\t${BLADEnme}\t${BLADEdesc[${srindx}]}= ${sn}" && BLADE[${srindx}]=${sn}
+	pindx=`GetIndex ${BLADE_CONFlbl} PWORD`
+	[ ! -n "${nodat}" ] && echo -e "\t${BLADEnme}\t${BLADE_CONFdesc[${pindx}]}= \"${pss}\"" && BLADE_CONF[${pindx}]=${pss}
+	if [ -n "${shelman}" ];then
+		shindx=`GetIndex ${BLADElbl} SHM`
+		echo -e "\t${BLADEnme}\t${BLADEdesc[${shindx}]}= ${shelman}"
+		SearchData "${SHELFlbl}" "=${shelman}$" "IP"
+		if [ $? -eq 0 ];then
+			shelman="${searchar[0]}"
+		else
+			shelman=""
+		fi
+		BLADE[${shindx}]=${shelman}
+	fi
+	slindx=`GetIndex ${BLADElbl} BSLOT`
+	[ -n "${slot}" ] && echo -e "\t${BLADEnme}\t${BLADEdesc[${slindx}]}= ${slot}" && BLADE[${slindx}]=${slot}
+	[ -n "${binfo}" ] && echo -e "${binfo}"
+}
+
+#When one parameter is provided
+#	The IP is searched for and the data for the shelf or blade is listed
+#When no parameter is provided, all blade and shelf data are listed
+DoGetSlot() {
+if [ -n "${1}" ];then
+	clear
+	echo "Searching for ${1} Info - DO NOT KILL SCRIPT"
+	if [ ${#shelips[@]} -eq 0 ];then
+		SetShms
+	fi
+	if [ ${#bladips[@]} -eq 0 ];then
+		SetBlades
+	fi
+	bla=`echo $1 | grep "${cliip}"`
+	she=`echo $1 | grep "${sheip}"`
+	[ -n "${bla}" ] && GetBladeData $1
+	[ -n "${she}" ] && GetShmData $1
+else
+	SetShms
+	SetBlades
+	SetShelfMatrix
+	for blade in "${bladips[@]}";do
+		slot=""
+		GetBladeData ${blade}		
+	done
+	for shm in "${shelips[@]}";do
+		GetShmData ${shm}
+		GetShelfInfo ${shm}
+	done
+fi
+}
+
+#Acts on Arguments given via command line
+GetArgs() {
+	echo -e "\n"
+	ga_exit=false
+	ga_args=$#
+	ga_typ=""
+	
+	GA_SetType() { #Takes Type as parameter
+		ga_typ=`echo "${1}" | tr "[:lower:]" "[:upper:]"`
+		ga_tytst=""
+		for ga_entry in ${entrytypes[@]};do
+			if [ "${ga_entry}" == "${ga_typ}" ];then
+				ga_tytst=${ga_entry}
+				break
+			fi
+		done
+		if [ -z "${ga_tytst}" ];then
+			echo -e "\nInvalid Type \"${ga_typ}\" passed"
+			echo -e "Valid Types are:"
+			for ga_tmp in ${entrytypes[@]};do
+				echo -e "\t$(eval echo \${${ga_tmp}nme})\t- ${ga_tmp}"
+			done
+			Exit 1
+		fi
+	}
+	
+	#CURR vars must be set
+	Exists() { #Takes search ID as parameter
+		DoesExist ${CURRid} "${CURRnme}" "${1}"
+		declare -i ge_res=$?
+		if [ "${ge_res}" == "0" ];then #Good Unique ID
+			return 0
+		elif [ "${ge_res}" == "1" ];then
+			echo -e "\nNo Such ${CURRnme} ID \"${1}\""
+			echo -e "Valid ${CURRnme}s are:"
+			ShowIt ${CURRlbl}
+			Exit 1
+		else
+			echo -e "\nProblem in Configuration file:"
+			echo -e "\tCheck for multiple ${CURRnme} \"${1}\"entries in ${fle}" && Exit 1
+		fi
+	}
+	
+	while [ $# -gt 0 ];do
+		case ${1} in
+			"-L") #List all entries for a certain type
+				ga_exit=true
+				GA_SetType "${2}"
+				SetVars ${ga_typ}
+				echo -e "\nShowing All ${CURRnme} Entries:"
+				ShowIt ${ga_typ}
+				echo -e "\n"
+				shift 2
+			;; 
+			"-l") #List Specific Configuration Entry
+				ga_exit=true
+				GA_SetType "${2}"
+				SetVars ${ga_typ}
+				ga_ide=$(echo ${3} | sed -e s/[" "\\t]//)
+				Exists "${ga_ide}"
+				echo -e "\nShowing ${CURRnme} - ${ga_ide} Entry:"
+				ShowIt ${ga_typ} ${3}
+				shift 3
+			;; 
+			"-c") #Run Blade Configuration w/o Reset
+				ga_exit=true
+				GA_SetType "${BLADE_CONFlbl}"
+				SetVars ${ga_typ}
+				ga_ide=$(echo ${2} | sed -e s/[" "\\t]//)
+				Exists "${ga_ide}"
+				echo -e "\nRunning ${CURRnme} - ${ga_ide} - Without Reset:"
+				ConfigureBlade "${2}" NOPROMPT
+				shift 2
+			;;
+			"-C") #Run Blade Configuration
+				ga_exit=true
+				GA_SetType "${BLADE_CONFlbl}"
+				SetVars ${ga_typ}
+				ga_ide=$(echo ${2} | sed -e s/[" "\\t]//)
+				Exists "${ga_ide}"
+				echo -e "\nRunning ${CURRnme} - ${ga_ide}:"
+				ConfigureBlade "${2}" REBOOT
+				shift 2
+			;;
+			"-D")
+				deebug="on"
+				shift 1
+			;; 
+			"-ip")
+				ga_exit=true
+				IsValidIP "${2}"
+				if [ $? -ne 0 ];then
+					echo -e "\nInvalid IP - \"${2}\""
+					Exit 1
+				fi
+				DoGetSlot "${2}"
+				shift 2
+			;;
+			"-probe")
+				ga_exit=true
+				echo -e "\nProbing Entire System" && sleep 1
+				DoGetSlot
+				shift 1
+			;;
+			*)
+				ga_exit=true
+				echo "NHconf - Usage:"
+				echo "-L: Displays All entries for the given Type"
+				echo "-l: Displays entry for the given Type and ID"
+				echo "-C: Runs a Blade Configuration and Resets the board"
+				echo "-c: Runs a Blade Configuration and DOES NOT Reset the board"
+				echo "-ip: Gets Info about specific IP Address"
+				echo "-probe: Probes for Info on ALL IP Address"
+				shift 1
+			;;
+		esac
+		if [ "${ga_exit}" == true ];then
+			Exit 0
+		fi
+	done
+}
+
+#IsRunning
+CheckConfig
+GetArgs $@
+ShowMenu MAIN
+
+Exit 0
